@@ -369,14 +369,12 @@ const TN_SEEDINGS = {
 
 /* ブラケット描画レイアウト */
 const TN_L = {
-  UNIT:    70,    // px per R1 slot
-  MATCH_H: 54,    // match box height
-  COL_W:   160,   // match box width
-  COL_GAP: 30,    // gap between columns
-  COL_X:   [0, 190, 380, 570],
-  MID_X:   [175, 365, 555],
-  SVG_W:   730,
-  SVG_H:   560,
+  UNIT:    80,
+  MATCH_H: 60,
+  COL_W:   175,
+  COL_GAP: 45,
+  COL_X:   [0, 220, 440, 660],
+  SVG_W:   835,
 };
 
 /* 32チーム初期値 */
@@ -916,70 +914,78 @@ function tnWinner(type, round, idx) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   トーナメント表描画（縦型ラウンド別レイアウト）
+   トーナメント表描画（横型ブラケット＋SVG接続線）
 ══════════════════════════════════════════════════════════ */
-function renderBracketVertical(type) {
-  const roundLabels = ['1回戦', '準々決勝', '準決勝', '決勝'];
+function renderBracket(type) {
+  const PAD = 20;
+  const { UNIT, MATCH_H, COL_W, COL_GAP, COL_X, SVG_W } = TN_L;
+  const SVG_H = 8 * UNIT + 2 * PAD;
   const roundCounts = [8, 4, 2, 1];
 
-  const rounds = roundLabels.map((label, r) => {
+  /* SVG 接続線 */
+  let lines = '';
+  for (let r = 0; r < 3; r++) {
+    const midX = COL_X[r] + COL_W + Math.floor(COL_GAP / 2);
     const n = roundCounts[r];
-    const matchCards = [];
-
     for (let idx = 0; idx < n; idx++) {
-      const mid      = tnMid(type, r, idx);
-      const teams    = tnMatchTeams(type, r, idx);
-      const sc       = tnScore(type, r, idx);
-      const s1       = sc.s1 !== undefined ? sc.s1 : '';
-      const s2       = sc.s2 !== undefined ? sc.s2 : '';
-      const dec      = tnDecided(type, r, idx);
-      const win      = dec ? tnWinner(type, r, idx) : null;
-      const isDraw   = dec && !win;
-      const t1       = teams[0], t2 = teams[1];
-      const t1win    = !!(win && t1 && win.id === t1.id);
-      const t2win    = !!(win && t2 && win.id === t2.id);
+      const cy  = tnCenterY(r, idx) + PAD;
+      const pcy = tnCenterY(r + 1, Math.floor(idx / 2)) + PAD;
+      lines += '<polyline points="' +
+        (COL_X[r] + COL_W) + ',' + cy + ' ' +
+        midX + ',' + cy + ' ' +
+        midX + ',' + pcy + ' ' +
+        COL_X[r + 1] + ',' + pcy +
+        '" fill="none" stroke="#cbd5e0" stroke-width="1.5"/>';
+    }
+  }
+
+  /* 対戦カード */
+  let boxes = '';
+  for (let r = 0; r < 4; r++) {
+    const n = roundCounts[r];
+    for (let idx = 0; idx < n; idx++) {
+      const cy   = tnCenterY(r, idx) + PAD;
+      const top  = Math.round(cy - MATCH_H / 2);
+      const x    = COL_X[r];
+      const mid  = tnMid(type, r, idx);
+      const teams = tnMatchTeams(type, r, idx);
+      const sc   = tnScore(type, r, idx);
+      const s1   = sc.s1 !== undefined ? sc.s1 : '';
+      const s2   = sc.s2 !== undefined ? sc.s2 : '';
+      const dec  = tnDecided(type, r, idx);
+      const win  = dec ? tnWinner(type, r, idx) : null;
+      const isDraw = dec && !win;
+      const t1 = teams[0], t2 = teams[1];
+      const t1win = !!(win && t1 && win.id === t1.id);
+      const t2win = !!(win && t2 && win.id === t2.id);
       const canInput = !!(t1 && t2);
 
-      let hd = '試合' + (idx + 1);
-      if (r === 0) {
-        const [[b1, r1], [b2, r2]] = TN_SEEDINGS[type][idx];
-        hd += '　' + BLOCK_META[b1].short + r1 + '位 vs ' + BLOCK_META[b2].short + r2 + '位';
-      }
+      const nameSpan = (team, isWin) => team
+        ? '<span class="tn-name">' + esc(team.name) + '</span>'
+        : '<em class="tn-name tn-tbd">未定</em>';
 
-      const scoreInp = (slot, val) =>
+      const inp = (slot, val) =>
         '<input class="tn-score-inp' + (val !== '' ? ' filled' : '') + '"' +
         ' type="number" inputmode="numeric" min="0" max="99" value="' + val + '"' +
         ' data-tntype="' + type + '" data-tnmid="' + mid + '" data-slot="' + slot + '"' +
         (canInput ? '' : ' disabled') + '>';
 
-      const nameHtml = team => team
-        ? '<span class="vtn-team-name">' + esc(team.name) + '</span>'
-        : '<em class="vtn-tbd">未定</em>';
-
-      matchCards.push(
-        '<div class="vtn-match' + (dec ? ' vtn-decided' : '') + '" id="vtm-' + mid + '">' +
-        '<div class="vtn-match-hd">' + hd + '</div>' +
-        '<div class="vtn-team' + (t1win ? ' vtn-winner' : '') + '">' +
-          nameHtml(t1) + scoreInp(0, s1) +
+      boxes +=
+        '<div style="position:absolute;left:' + x + 'px;top:' + top + 'px;width:' + COL_W + 'px" id="bm-' + mid + '">' +
+        '<div class="tn-match' + (dec ? ' tn-decided' : '') + '">' +
+        '<div class="tn-team' + (t1win ? ' tn-winner' : '') + '">' + nameSpan(t1, t1win) + inp(0, s1) + '</div>' +
+        '<div class="tn-divider"></div>' +
+        '<div class="tn-team' + (t2win ? ' tn-winner' : '') + '">' + nameSpan(t2, t2win) + inp(1, s2) + '</div>' +
+        (isDraw ? '<div class="tn-draw-note">引分—勝者を手入力で確定</div>' : '') +
         '</div>' +
-        '<div class="vtn-divider"></div>' +
-        '<div class="vtn-team' + (t2win ? ' vtn-winner' : '') + '">' +
-          nameHtml(t2) + scoreInp(1, s2) +
-        '</div>' +
-        (isDraw ? '<div class="vtn-draw-note">引分—勝者を手入力で確定してください</div>' : '') +
-        '</div>'
-      );
+        '</div>';
     }
+  }
 
-    return '<div class="vtn-round">' +
-      '<h3 class="vtn-round-hd">' + label +
-        ' <span class="vtn-round-cnt">' + n + '試合</span>' +
-      '</h3>' +
-      '<div class="vtn-matches-grid">' + matchCards.join('') + '</div>' +
-      '</div>';
-  });
-
-  return '<div class="vtn-rounds">' + rounds.join('') + '</div>';
+  return '<div style="position:relative;width:' + SVG_W + 'px;height:' + SVG_H + 'px">' +
+    '<svg style="position:absolute;top:0;left:0;width:' + SVG_W + 'px;height:' + SVG_H + 'px" xmlns="http://www.w3.org/2000/svg">' +
+    lines + '</svg>' +
+    boxes + '</div>';
 }
 
 function renderBracketPane(type, paneId) {
@@ -995,11 +1001,25 @@ function renderBracketPane(type, paneId) {
     '⚠️ リーグ戦が完了したブロックからトーナメント表に反映されます。未完了ブロックは「未定」で表示されます。' +
     '</div>';
 
+  const { COL_W, COL_GAP, COL_X, SVG_W } = TN_L;
+  const roundLabels = ['1回戦', '準々決勝', '準決勝', '決勝'];
+  const labelBar = '<div style="display:flex;width:' + SVG_W + 'px;margin-bottom:6px">' +
+    roundLabels.map((lbl, r) =>
+      '<div style="width:' + COL_W + 'px;' +
+      (r < 3 ? 'margin-right:' + COL_GAP + 'px;' : '') +
+      'text-align:center;font-size:0.75em;font-weight:bold;color:#4a5568;' +
+      'background:#edf2f7;padding:4px 0;border-radius:4px;">' + lbl + '</div>'
+    ).join('') +
+    '</div>';
+
   document.getElementById(paneId).innerHTML =
     '<div style="padding:14px">' +
     '<h2 style="font-size:0.95em;font-weight:bold;color:#4a5568;margin-bottom:10px;">' + title + '</h2>' +
     note +
-    renderBracketVertical(type) +
+    '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:12px">' +
+    labelBar +
+    renderBracket(type) +
+    '</div>' +
     '</div>';
 }
 
