@@ -51,7 +51,7 @@ body {
 /* ─── Team List ────────────────────────────────────────── */
 .block-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 10px;
 }
 .block-card { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
@@ -72,14 +72,22 @@ body {
 .team-nm  { color: #2d3748; }
 
 /* ─── Match List ───────────────────────────────────────── */
-.court-sec { margin-bottom: 20px; }
-.court-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.court-hd h3 { font-size: 0.95em; color: #4a5568; font-weight: bold; }
-.progress-badge {
-  font-size: 0.75em; padding: 2px 9px;
-  background: #ebf8ff; color: #2b6cb0;
-  border-radius: 10px; border: 1px solid #bee3f8;
+.court-sec { margin-bottom: 0; }
+.court-nav { display: flex; gap: 8px; margin-bottom: 14px; }
+.court-tab-btn {
+  flex: 1; padding: 10px 8px;
+  background: white; border: 2px solid #e2e8f0; border-radius: 8px;
+  cursor: pointer; font-size: 0.85em; font-weight: bold; color: #4a5568;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
+.court-tab-btn:hover { border-color: #90cdf4; color: #2b6cb0; }
+.court-tab-btn.active { border-color: #4299e1; background: #ebf8ff; color: #2b6cb0; }
+.court-tab-btn.court-done { border-color: #48bb78; background: #f0fff4; color: #276749; }
+.court-tab-btn.active.court-done { border-color: #38a169; background: #c6f6d5; }
+.court-tab-progress { font-size: 0.72em; font-weight: normal; color: #718096; }
+.court-tab-btn.active .court-tab-progress { color: #2b6cb0; }
+.court-tab-btn.court-done .court-tab-progress { color: #276749; }
 
 .match-table { width: 100%; border-collapse: collapse; font-size: 0.85em; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 .match-table th {
@@ -470,7 +478,8 @@ let state = {
   tnScores:     { final: {}, wanpaku: {} },
 };
 
-let allMatches = [];  // buildMatches キャッシュ
+let allMatches  = [];  // buildMatches キャッシュ
+let matchCourt  = 'A'; // 対戦リストで表示中のコート
 
 function loadState() {
   try {
@@ -569,32 +578,36 @@ function renderMatches() {
   const byCourt = { A:[], B:[], C:[], D:[] };
   allMatches.forEach(m => byCourt[m.court].push(m));
 
-  el.innerHTML = ['A','B','C','D'].map(court => {
-    const ms  = byCourt[court];
-    const { done, total } = courtProgress(court, ms);
+  /* コート選択ナビ */
+  const nav = '<div class="court-nav">' +
+    ['A','B','C','D'].map(court => {
+      const { done, total } = courtProgress(court, byCourt[court]);
+      const isDone   = done === total;
+      const isActive = court === matchCourt;
+      return '<button class="court-tab-btn' +
+        (isActive ? ' active' : '') + (isDone ? ' court-done' : '') +
+        '" id="court-nav-' + court + '" data-court="' + court + '">' +
+        court + 'コート' +
+        '<span class="court-tab-progress">' + done + '/' + total + ' 試合</span>' +
+        '</button>';
+    }).join('') +
+    '</div>';
 
-    return `<div class="court-sec" id="sec-${court}">
-      <div class="court-hd">
-        <h3>${court}コート</h3>
-        <span class="progress-badge" id="badge-${court}">${done}/${total} 試合完了</span>
-      </div>
-      <div style="overflow-x:auto">
-        <table class="match-table">
-          <thead><tr>
-            <th>No</th>
-            <th>時間</th>
-            <th>ブロック</th>
-            <th style="text-align:right;padding-right:6px">チーム１</th>
-            <th colspan="3">スコア</th>
-            <th style="text-align:left;padding-left:6px">チーム２</th>
-          </tr></thead>
-          <tbody>
-            ${ms.map((m, i) => matchRowHTML(m, i)).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>`;
-  }).join('');
+  /* 選択中コートの試合一覧 */
+  const ms = byCourt[matchCourt];
+  const section =
+    '<div class="court-sec" id="sec-' + matchCourt + '">' +
+    '<div style="overflow-x:auto"><table class="match-table">' +
+    '<thead><tr>' +
+    '<th>No</th><th>時間</th><th>ブロック</th>' +
+    '<th style="text-align:right;padding-right:6px">チーム１</th>' +
+    '<th colspan="3">スコア</th>' +
+    '<th style="text-align:left;padding-left:6px">チーム２</th>' +
+    '</tr></thead>' +
+    '<tbody>' + ms.map((m, i) => matchRowHTML(m, i)).join('') + '</tbody>' +
+    '</table></div></div>';
+
+  el.innerHTML = nav + section;
 }
 
 function matchRowHTML(m, i) {
@@ -679,8 +692,11 @@ function refreshBadge(mid) {
   const court = mid.split('-')[0];
   const ms    = allMatches.filter(m => m.court === court);
   const { done, total } = courtProgress(court, ms);
-  const badge = document.getElementById('badge-' + court);
-  if (badge) badge.textContent = `${done}/${total} 試合完了`;
+  const btn = document.getElementById('court-nav-' + court);
+  if (!btn) return;
+  const prog = btn.querySelector('.court-tab-progress');
+  if (prog) prog.textContent = done + '/' + total + ' 試合';
+  btn.classList.toggle('court-done', done === total);
 }
 
 function courtProgress(court, ms) {
@@ -836,6 +852,14 @@ function renderLeague() {
 
   el.innerHTML = '<div class="league-grid">' + cards.join('') + '</div>';
 }
+
+/* ─── コート切替ハンドラ ────────────────────────────────── */
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.court-tab-btn');
+  if (!btn || !btn.dataset.court) return;
+  matchCourt = btn.dataset.court;
+  renderMatches();
+});
 
 /* ─── 順位入替ハンドラ ──────────────────────────────────── */
 document.addEventListener('click', e => {
