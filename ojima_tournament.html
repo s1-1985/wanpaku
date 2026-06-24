@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>OJIMAわんぱく対戦表 2025夏</title>
+<style>
+/* ─── Reset & Base ─────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 15px; }
+body {
+  font-family: 'Hiragino Sans', 'Noto Sans JP', 'Meiryo', 'YuGothic', sans-serif;
+  background: #f0f4f8; color: #2d3748; min-height: 100vh;
+}
+
+/* ─── Header ───────────────────────────────────────────── */
+.site-header {
+  background: linear-gradient(135deg, #1a3a6b 0%, #2c5282 100%);
+  color: white; padding: 12px 16px;
+}
+.site-header h1 { font-size: 1.1em; font-weight: bold; text-align: center; }
+.site-header p  { font-size: 0.78em; text-align: center; color: rgba(255,255,255,0.7); margin-top: 2px; }
+
+/* ─── Tab Navigation ───────────────────────────────────── */
+.tab-nav {
+  display: flex; background: #2d3748;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; position: sticky; top: 0; z-index: 100;
+}
+.tab-nav::-webkit-scrollbar { display: none; }
+.tab-btn {
+  flex: none; padding: 11px 14px; background: none; border: none;
+  color: #a0aec0; cursor: pointer; font-size: 0.82em; white-space: nowrap;
+  border-bottom: 3px solid transparent; transition: color 0.2s;
+}
+.tab-btn:hover { color: #e2e8f0; }
+.tab-btn.active { color: #fff; border-bottom-color: #63b3ed; font-weight: bold; }
+
+/* ─── Tab Panes ────────────────────────────────────────── */
+.tab-pane { display: none; padding: 14px; }
+.tab-pane.active { display: block; }
+
+/* ─── Block color tokens ───────────────────────────────── */
+:root {
+  --color-A: #2b6cb0;
+  --color-B: #276749;
+  --color-C: #c05621;
+  --color-D: #6b46c1;
+}
+
+/* ─── Team List ────────────────────────────────────────── */
+.block-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+.block-card { background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
+.block-card-hd {
+  padding: 9px 12px; font-weight: bold; font-size: 0.88em; color: white;
+  letter-spacing: 0.03em;
+}
+.bc-A .block-card-hd { background: var(--color-A); }
+.bc-B .block-card-hd { background: var(--color-B); }
+.bc-C .block-card-hd { background: var(--color-C); }
+.bc-D .block-card-hd { background: var(--color-D); }
+.team-row {
+  display: flex; align-items: center; padding: 7px 12px;
+  border-bottom: 1px solid #f0f0f0; font-size: 0.88em;
+}
+.team-row:last-child { border-bottom: none; }
+.team-idx { color: #a0a0a0; min-width: 22px; font-size: 0.8em; }
+.team-nm  { color: #2d3748; }
+
+/* ─── Match List ───────────────────────────────────────── */
+.court-sec { margin-bottom: 20px; }
+.court-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.court-hd h3 { font-size: 0.95em; color: #4a5568; font-weight: bold; }
+.progress-badge {
+  font-size: 0.75em; padding: 2px 9px;
+  background: #ebf8ff; color: #2b6cb0;
+  border-radius: 10px; border: 1px solid #bee3f8;
+}
+
+.match-table { width: 100%; border-collapse: collapse; font-size: 0.85em; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.match-table th {
+  background: #edf2f7; color: #4a5568; padding: 7px 4px;
+  text-align: center; font-weight: bold; font-size: 0.82em; white-space: nowrap;
+}
+.match-table td { padding: 6px 4px; border-bottom: 1px solid #f7fafc; vertical-align: middle; }
+.match-table tr:last-child td { border-bottom: none; }
+.match-table tr.done td { background: #f0fff4; }
+.match-table tr:hover:not(.done) td { background: #f7fafc; }
+.match-table tr.done:hover td { background: #e6ffed; }
+
+.col-no   { text-align: center; color: #a0aec0; width: 26px; font-size: 0.82em; }
+.col-time { text-align: center; color: #718096; width: 54px; font-size: 0.82em; white-space: nowrap; }
+.col-blk  { text-align: center; width: 40px; }
+.col-t1   { text-align: right; padding-right: 5px; }
+.col-t2   { text-align: left; padding-left: 5px; }
+.col-score { text-align: center; width: 44px; padding: 4px 2px; }
+.col-sep   { text-align: center; color: #cbd5e0; width: 16px; padding: 0; font-size: 0.9em; }
+
+/* ブロックバッジ */
+.blk-badge {
+  display: inline-block; font-size: 0.72em; padding: 1px 5px;
+  border-radius: 10px; color: white; white-space: nowrap;
+}
+
+/* スコア入力 */
+.score-inp {
+  width: 40px; height: 36px;
+  border: 2px solid #cbd5e0; border-radius: 5px;
+  text-align: center; font-size: 1.05em; font-weight: bold;
+  color: #2d3748; background: #f7fafc;
+  -moz-appearance: textfield; appearance: textfield;
+  transition: border-color 0.15s, background 0.15s;
+  touch-action: manipulation;
+}
+.score-inp::-webkit-inner-spin-button,
+.score-inp::-webkit-outer-spin-button { -webkit-appearance: none; }
+.score-inp:focus {
+  border-color: #4299e1; background: #fff; outline: none;
+  box-shadow: 0 0 0 3px rgba(66,153,225,0.2);
+}
+.score-inp.filled { border-color: #48bb78; background: #f0fff4; }
+
+/* ─── Coming Soon ──────────────────────────────────────── */
+.coming-soon {
+  padding: 40px 24px; text-align: center; color: #a0aec0;
+}
+.coming-soon .icon { font-size: 2.5em; margin-bottom: 10px; }
+.coming-soon p { font-size: 0.9em; }
+
+/* ─── League Standings ──────────────────────────────────── */
+.league-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+.league-card {
+  background: white; border-radius: 8px; overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+.league-card-hd {
+  padding: 9px 12px; font-weight: bold; font-size: 0.88em;
+  color: white; letter-spacing: 0.03em;
+}
+.standings-table {
+  width: 100%; border-collapse: collapse; font-size: 0.78em;
+}
+.standings-table th {
+  background: #edf2f7; color: #4a5568; padding: 5px 3px;
+  text-align: center; font-weight: bold; font-size: 0.77em;
+  white-space: nowrap;
+}
+.standings-table td {
+  padding: 5px 3px; border-bottom: 1px solid #f7fafc;
+  vertical-align: middle; text-align: center;
+}
+.standings-table tr:last-child td { border-bottom: none; }
+.standings-table tr:hover td { background: #f7fafc; }
+.standings-table .sname-cell {
+  text-align: left; padding-left: 7px; white-space: nowrap;
+  max-width: 130px; overflow: hidden; text-overflow: ellipsis;
+}
+.rank-cell { font-weight: bold; min-width: 28px; }
+.rank-gold   { color: #b7791f; }
+.rank-silver { color: #718096; }
+.rank-bronze { color: #9c6543; }
+.rank-tied   {
+  font-size: 0.65em; color: #a0aec0;
+  vertical-align: super; margin-left: 1px;
+}
+.pts-cell  { font-weight: bold; color: #2d3748; }
+.gd-pos    { color: #276749; }
+.gd-neg    { color: #c53030; }
+.swap-btn  {
+  font-size: 0.7em; padding: 2px 5px;
+  background: #ebf8ff; color: #2b6cb0;
+  border: 1px solid #bee3f8; border-radius: 4px;
+  cursor: pointer; white-space: nowrap;
+}
+.swap-btn:hover { background: #bee3f8; }
+.tie-note {
+  font-size: 0.75em; color: #718096;
+  padding: 5px 10px 7px; text-align: right; font-style: italic;
+}
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <h1>⚽ OJIMAわんぱく対戦表 2025夏</h1>
+  <p>第37回 OJIMA わんぱくサッカー大会</p>
+</header>
+
+<nav class="tab-nav">
+  <button class="tab-btn active" data-tab="teamlist">チームリスト</button>
+  <button class="tab-btn" data-tab="matches">対戦リスト</button>
+  <button class="tab-btn" data-tab="league">リーグ戦</button>
+  <button class="tab-btn" data-tab="final">決勝ＴＮ</button>
+  <button class="tab-btn" data-tab="wanpaku">わんぱくＴＮ</button>
+</nav>
+
+<div id="pane-teamlist" class="tab-pane active"></div>
+<div id="pane-matches"  class="tab-pane"></div>
+<div id="pane-league"   class="tab-pane"></div>
+<div id="pane-final"    class="tab-pane">
+  <div class="coming-soon"><div class="icon">🏆</div><p>決勝トーナメント（Phase ③ 実装予定）</p></div>
+</div>
+<div id="pane-wanpaku"  class="tab-pane">
+  <div class="coming-soon"><div class="icon">🌟</div><p>わんぱくトーナメント（Phase ③ 実装予定）</p></div>
+</div>
+
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════
+   定数・初期データ
+══════════════════════════════════════════════════════════ */
+const STORAGE_KEY = 'wanpaku2025';
+
+const BLOCK_META = {
+  A1: { label:'Ａコート①', short:'Ａ①', letter:'A' },
+  A2: { label:'Ａコート②', short:'Ａ②', letter:'A' },
+  B1: { label:'Ｂコート①', short:'Ｂ①', letter:'B' },
+  B2: { label:'Ｂコート②', short:'Ｂ②', letter:'B' },
+  C1: { label:'Ｃコート①', short:'Ｃ①', letter:'C' },
+  C2: { label:'Ｃコート②', short:'Ｃ②', letter:'C' },
+  D1: { label:'Ｄコート①', short:'Ｄ①', letter:'D' },
+  D2: { label:'Ｄコート②', short:'Ｄ②', letter:'D' },
+};
+
+const BLOCK_ORDER = ['A1','A2','B1','B2','C1','C2','D1','D2'];
+
+const BLOCK_COLORS = { A:'#2b6cb0', B:'#276749', C:'#c05621', D:'#6b46c1' };
+
+/* 各コートの12試合の開始時刻（対戦リストより） */
+const MATCH_TIMES = [
+  '9:00','9:30','10:00','10:30',
+  '11:00','11:30','12:00','12:30',
+  '13:00','13:30','14:00','14:30',
+];
+
+/* 4チーム総当たりのペア順（Excel の対戦リスト順に一致）
+   Round1: T1vsT2, T3vsT4
+   Round2: T1vsT3, T2vsT4
+   Round3: T1vsT4, T2vsT3  */
+const RR_ROUNDS = [
+  [[0,1],[2,3]],
+  [[0,2],[1,3]],
+  [[0,3],[1,2]],
+];
+
+/* 32チーム初期値 */
+const DEFAULT_TEAMS = [
+  {id:1,  name:'宝東sss',          block:'A1'},
+  {id:2,  name:'鳥之郷FC',         block:'A1'},
+  {id:3,  name:'境ジュニア',       block:'A1'},
+  {id:4,  name:'平井ＪＳＣ',      block:'A1'},
+  {id:5,  name:'新田ss',           block:'A2'},
+  {id:6,  name:'韮西sc',           block:'A2'},
+  {id:7,  name:'高崎K2',           block:'A2'},
+  {id:8,  name:'吉井ＪＰ',        block:'A2'},
+  {id:9,  name:'ＦＣ九合',        block:'B1'},
+  {id:10, name:'ＦＣ城西',        block:'B1'},
+  {id:11, name:'三重山前FC',       block:'B1'},
+  {id:12, name:'前橋ジュニア',     block:'B1'},
+  {id:13, name:'太田中央',         block:'B2'},
+  {id:14, name:'ゴラッソ高崎',     block:'B2'},
+  {id:15, name:'前橋エコー',       block:'B2'},
+  {id:16, name:'ＦＣ片岡',        block:'B2'},
+  {id:17, name:'毛里田JFC',        block:'C1'},
+  {id:18, name:'太田南FC',         block:'C1'},
+  {id:19, name:'TACFCjr',          block:'C1'},
+  {id:20, name:'芝根ﾘﾄﾙｽﾀｰ',     block:'C1'},
+  {id:21, name:'FC新田88',         block:'C2'},
+  {id:22, name:'パレイストラ',     block:'C2'},
+  {id:23, name:'足利キッズ',       block:'C2'},
+  {id:24, name:'渋川FC',           block:'C2'},
+  {id:25, name:'笠懸84',           block:'D1'},
+  {id:26, name:'ＨＦＣ',          block:'D1'},
+  {id:27, name:'ＦＣ尾島キッズ',  block:'D1'},
+  {id:28, name:'館林ＪＳＣ',      block:'D1'},
+  {id:29, name:'強戸KS',           block:'D2'},
+  {id:30, name:'ＦＣ尾島ｼﾞｭﾆｱ',  block:'D2'},
+  {id:31, name:'ＦＣ藤岡',        block:'D2'},
+  {id:32, name:'岩神ＳＣ',        block:'D2'},
+];
+
+/* ═══════════════════════════════════════════════════════════
+   対戦リスト生成
+   Excel の対戦リスト行順（コート A → B → C → D、各コート
+   12 試合）と同一スケジュールを再現する。
+══════════════════════════════════════════════════════════ */
+function buildMatches(teams) {
+  const matches = [];
+  const courtBlocks = {
+    A: ['A1','A2'], B: ['B1','B2'],
+    C: ['C1','C2'], D: ['D1','D2'],
+  };
+
+  ['A','B','C','D'].forEach(court => {
+    const [b1, b2] = courtBlocks[court];
+    const g1 = teams.filter(t => t.block === b1);  // ブロック①の4チーム
+    const g2 = teams.filter(t => t.block === b2);  // ブロック②の4チーム
+    let seq = 0;  // 時刻インデックス (0〜11)
+
+    RR_ROUNDS.forEach(([p1, p2]) => {
+      // ブロック①の2試合を先に
+      [p1, p2].forEach(([i, j]) => {
+        matches.push({
+          id: `${court}-${seq + 1}`,
+          court, block: b1,
+          time: MATCH_TIMES[seq],
+          t1id: g1[i].id,
+          t2id: g1[j].id,
+        });
+        seq++;
+      });
+      // 次にブロック②の2試合
+      [p1, p2].forEach(([i, j]) => {
+        matches.push({
+          id: `${court}-${seq + 1}`,
+          court, block: b2,
+          time: MATCH_TIMES[seq],
+          t1id: g2[i].id,
+          t2id: g2[j].id,
+        });
+        seq++;
+      });
+    });
+  });
+
+  return matches;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   State & localStorage
+══════════════════════════════════════════════════════════ */
+let state = {
+  teams:        JSON.parse(JSON.stringify(DEFAULT_TEAMS)),
+  scores:       {},   // { matchId: { s1: number, s2: number } }
+  rankOverrides: {},  // { blockId: [teamId, teamId, teamId, teamId] }
+};
+
+let allMatches = [];  // buildMatches キャッシュ
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (Array.isArray(saved.teams)) state.teams = saved.teams;
+    if (saved.scores && typeof saved.scores === 'object') state.scores = saved.scores;
+    if (saved.rankOverrides && typeof saved.rankOverrides === 'object') state.rankOverrides = saved.rankOverrides;
+  } catch (_) { /* localStorage 使用不可の場合は無視 */ }
+}
+
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      teams:        state.teams,
+      scores:       state.scores,
+      rankOverrides: state.rankOverrides,
+    }));
+  } catch (_) {}
+}
+
+function getTeam(id) {
+  return state.teams.find(t => t.id === id);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   タブ制御
+══════════════════════════════════════════════════════════ */
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('pane-' + btn.dataset.tab).classList.add('active');
+
+    if (btn.dataset.tab === 'teamlist') renderTeamList();
+    if (btn.dataset.tab === 'matches')  renderMatches();
+    if (btn.dataset.tab === 'league')   renderLeague();
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════
+   チームリスト描画
+══════════════════════════════════════════════════════════ */
+function renderTeamList() {
+  const el = document.getElementById('pane-teamlist');
+
+  const byBlock = {};
+  BLOCK_ORDER.forEach(b => { byBlock[b] = []; });
+  state.teams.forEach(t => { if (byBlock[t.block]) byBlock[t.block].push(t); });
+
+  el.innerHTML = '<div class="block-grid">' +
+    BLOCK_ORDER.map(block => {
+      const meta   = BLOCK_META[block];
+      const letter = meta.letter;
+      const teams  = byBlock[block];
+      return `<div class="block-card bc-${letter}">
+        <div class="block-card-hd">${meta.label}</div>
+        ${teams.map((t, i) => `
+          <div class="team-row">
+            <span class="team-idx">${i + 1}.</span>
+            <span class="team-nm">${esc(t.name)}</span>
+          </div>`).join('')}
+      </div>`;
+    }).join('') +
+  '</div>';
+}
+
+/* ═══════════════════════════════════════════════════════════
+   対戦リスト描画
+══════════════════════════════════════════════════════════ */
+function renderMatches() {
+  const el = document.getElementById('pane-matches');
+  allMatches = buildMatches(state.teams);
+
+  const byCourt = { A:[], B:[], C:[], D:[] };
+  allMatches.forEach(m => byCourt[m.court].push(m));
+
+  el.innerHTML = ['A','B','C','D'].map(court => {
+    const ms  = byCourt[court];
+    const { done, total } = courtProgress(court, ms);
+
+    return `<div class="court-sec" id="sec-${court}">
+      <div class="court-hd">
+        <h3>${court}コート</h3>
+        <span class="progress-badge" id="badge-${court}">${done}/${total} 試合完了</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="match-table">
+          <thead><tr>
+            <th>No</th>
+            <th>時間</th>
+            <th>ブロック</th>
+            <th style="text-align:right;padding-right:6px">チーム１</th>
+            <th colspan="3">スコア</th>
+            <th style="text-align:left;padding-left:6px">チーム２</th>
+          </tr></thead>
+          <tbody>
+            ${ms.map((m, i) => matchRowHTML(m, i)).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function matchRowHTML(m, i) {
+  const t1   = getTeam(m.t1id);
+  const t2   = getTeam(m.t2id);
+  const sc   = state.scores[m.id] || {};
+  const s1   = sc.s1 !== undefined ? sc.s1 : '';
+  const s2   = sc.s2 !== undefined ? sc.s2 : '';
+  const done = (s1 !== '' && s2 !== '');
+  const meta = BLOCK_META[m.block];
+  const color = BLOCK_COLORS[meta.letter];
+
+  return `<tr class="${done ? 'done' : ''}" id="row-${m.id}">
+    <td class="col-no">${i + 1}</td>
+    <td class="col-time">${m.time}</td>
+    <td class="col-blk">
+      <span class="blk-badge" style="background:${color}">${meta.short}</span>
+    </td>
+    <td class="col-t1">${esc(t1 ? t1.name : '?')}</td>
+    <td class="col-score">
+      <input class="score-inp${done ? ' filled' : ''}"
+        type="number" inputmode="numeric" min="0" max="99"
+        value="${s1}"
+        data-mid="${m.id}" data-side="s1"
+        aria-label="${t1 ? t1.name : ''}のスコア">
+    </td>
+    <td class="col-sep">－</td>
+    <td class="col-score">
+      <input class="score-inp${done ? ' filled' : ''}"
+        type="number" inputmode="numeric" min="0" max="99"
+        value="${s2}"
+        data-mid="${m.id}" data-side="s2"
+        aria-label="${t2 ? t2.name : ''}のスコア">
+    </td>
+    <td class="col-t2">${esc(t2 ? t2.name : '?')}</td>
+  </tr>`;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   スコア入力ハンドラ
+══════════════════════════════════════════════════════════ */
+/* フォーカス時に全選択（上書きしやすくする） */
+document.addEventListener('focus', e => {
+  if (e.target.classList.contains('score-inp')) e.target.select();
+}, true);
+
+/* 入力イベント */
+document.addEventListener('input', e => {
+  const inp = e.target;
+  if (!inp.classList.contains('score-inp')) return;
+
+  const mid  = inp.dataset.mid;
+  const side = inp.dataset.side;
+  const raw  = inp.value.trim();
+
+  if (!state.scores[mid]) state.scores[mid] = {};
+
+  if (raw === '' || isNaN(+raw)) {
+    delete state.scores[mid][side];
+  } else {
+    state.scores[mid][side] = Math.max(0, Math.floor(+raw));
+  }
+
+  refreshRow(mid);
+  refreshBadge(mid);
+  saveState();
+  if (document.getElementById('pane-league').classList.contains('active')) {
+    renderLeague();
+  }
+});
+
+function refreshRow(mid) {
+  const sc   = state.scores[mid] || {};
+  const done = sc.s1 !== undefined && sc.s2 !== undefined;
+  const row  = document.getElementById('row-' + mid);
+  if (!row) return;
+  row.classList.toggle('done', done);
+  row.querySelectorAll('.score-inp').forEach(inp => inp.classList.toggle('filled', done));
+}
+
+function refreshBadge(mid) {
+  const court = mid.split('-')[0];
+  const ms    = allMatches.filter(m => m.court === court);
+  const { done, total } = courtProgress(court, ms);
+  const badge = document.getElementById('badge-' + court);
+  if (badge) badge.textContent = `${done}/${total} 試合完了`;
+}
+
+function courtProgress(court, ms) {
+  if (!ms) ms = allMatches.filter(m => m.court === court);
+  const done = ms.filter(m => {
+    const sc = state.scores[m.id];
+    return sc && sc.s1 !== undefined && sc.s2 !== undefined;
+  }).length;
+  return { done, total: ms.length };
+}
+
+/* ═══════════════════════════════════════════════════════════
+   リーグ戦順位計算
+══════════════════════════════════════════════════════════ */
+function computeStandings(blockId) {
+  const blockTeams   = state.teams.filter(t => t.block === blockId);
+  const blockMatches = allMatches.filter(m => m.block === blockId);
+
+  const stats = {};
+  blockTeams.forEach(t => { stats[t.id] = { w:0, d:0, l:0, gf:0, ga:0 }; });
+
+  blockMatches.forEach(m => {
+    const sc = state.scores[m.id];
+    if (!sc || sc.s1 === undefined || sc.s2 === undefined) return;
+    const s1 = sc.s1, s2 = sc.s2;
+    const st1 = stats[m.t1id], st2 = stats[m.t2id];
+    if (!st1 || !st2) return;
+    st1.gf += s1; st1.ga += s2;
+    st2.gf += s2; st2.ga += s1;
+    if      (s1 > s2) { st1.w++; st2.l++; }
+    else if (s1 < s2) { st1.l++; st2.w++; }
+    else              { st1.d++; st2.d++; }
+  });
+
+  let rows = blockTeams.map(t => {
+    const s = stats[t.id];
+    const pts = s.w * 3 + s.d;
+    const gd  = s.gf - s.ga;
+    return { team:t, w:s.w, d:s.d, l:s.l, gf:s.gf, ga:s.ga, gd, pts };
+  });
+
+  /* 1次ソート: 勝点 → 得失点差 → 総得点 */
+  rows.sort((a, b) => {
+    if (b.pts !== a.pts) return b.pts - a.pts;
+    if (b.gd  !== a.gd)  return b.gd  - a.gd;
+    return b.gf - a.gf;
+  });
+
+  /* タイグループ内を手動順位で再ソート */
+  const ov = (state.rankOverrides || {})[blockId];
+  if (ov && ov.length) {
+    let i = 0;
+    while (i < rows.length) {
+      let j = i + 1;
+      while (j < rows.length &&
+             rows[j].pts === rows[i].pts &&
+             rows[j].gd  === rows[i].gd  &&
+             rows[j].gf  === rows[i].gf) { j++; }
+      if (j - i > 1) {
+        const grp = rows.slice(i, j).sort((a, b) => {
+          const ai = ov.indexOf(a.team.id);
+          const bi = ov.indexOf(b.team.id);
+          if (ai < 0 && bi < 0) return 0;
+          if (ai < 0) return 1;
+          if (bi < 0) return -1;
+          return ai - bi;
+        });
+        rows.splice(i, j - i, ...grp);
+      }
+      i = j;
+    }
+  }
+
+  /* 表示順位の付与・タイフラグ */
+  rows.forEach((row, idx) => {
+    if (idx === 0) {
+      row.rank = 1; row.tiedAbove = false; row.tiedBelow = false;
+    } else {
+      const prev = rows[idx - 1];
+      const tied = (row.pts === prev.pts && row.gd === prev.gd && row.gf === prev.gf);
+      row.rank       = tied ? prev.rank : idx + 1;
+      row.tiedAbove  = tied;
+      row.tiedBelow  = false;
+      if (tied) prev.tiedBelow = true;
+    }
+  });
+
+  return rows;
+}
+
+/* ─── リーグ戦描画 ──────────────────────────────────────── */
+function renderLeague() {
+  allMatches = buildMatches(state.teams);
+  const el = document.getElementById('pane-league');
+
+  let hasTie = false;
+  const cards = BLOCK_ORDER.map(blockId => {
+    const meta  = BLOCK_META[blockId];
+    const color = BLOCK_COLORS[meta.letter];
+    const rows  = computeStandings(blockId);
+    const blockHasTie = rows.some(r => r.tiedAbove || r.tiedBelow);
+    if (blockHasTie) hasTie = true;
+
+    const rankClass = r =>
+      r.rank === 1 ? 'rank-gold' : r.rank === 2 ? 'rank-silver' : r.rank === 3 ? 'rank-bronze' : '';
+
+    return `<div class="league-card">
+      <div class="league-card-hd" style="background:${color}">${meta.label}</div>
+      <table class="standings-table">
+        <thead><tr>
+          <th>順位</th>
+          <th style="text-align:left;padding-left:7px">チーム</th>
+          <th title="試合数">試</th>
+          <th title="勝">勝</th>
+          <th title="分">分</th>
+          <th title="負">負</th>
+          <th title="得点">得</th>
+          <th title="失点">失</th>
+          <th title="得失点差">差</th>
+          <th title="勝点">点</th>
+          <th></th>
+        </tr></thead>
+        <tbody>
+          ${rows.map((row, idx) => {
+            const gp    = row.w + row.d + row.l;
+            const gdStr = row.gd > 0 ? '+' + row.gd : String(row.gd);
+            const gdCls = row.gd > 0 ? 'gd-pos' : row.gd < 0 ? 'gd-neg' : '';
+            const tieTag = (row.tiedAbove || row.tiedBelow)
+              ? '<span class="rank-tied">＝</span>' : '';
+            return `<tr>
+              <td class="rank-cell ${rankClass(row)}">${row.rank}${tieTag}</td>
+              <td class="sname-cell">${esc(row.team.name)}</td>
+              <td>${gp}</td>
+              <td>${row.w}</td>
+              <td>${row.d}</td>
+              <td>${row.l}</td>
+              <td>${row.gf}</td>
+              <td>${row.ga}</td>
+              <td class="${gdCls}">${gdStr}</td>
+              <td class="pts-cell">${row.pts}</td>
+              <td>${row.tiedAbove
+                ? `<button class="swap-btn" data-block="${blockId}" data-idx="${idx}" title="上のチームと順位を入れ替え">↑入替</button>`
+                : ''}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      ${blockHasTie ? '<div class="tie-note">＝ タイ（↑入替で手動調整）</div>' : ''}
+    </div>`;
+  });
+
+  el.innerHTML = '<div class="league-grid">' + cards.join('') + '</div>';
+}
+
+/* ─── 順位入替ハンドラ ──────────────────────────────────── */
+document.addEventListener('click', e => {
+  if (!e.target.classList.contains('swap-btn')) return;
+  const blockId = e.target.dataset.block;
+  const idx     = parseInt(e.target.dataset.idx, 10);
+
+  const rows = computeStandings(blockId);
+  if (idx < 1) return;
+
+  /* 現在の並びを取得し、タイグループ内で1つ上と入替 */
+  const order = rows.map(r => r.team.id);
+  [order[idx - 1], order[idx]] = [order[idx], order[idx - 1]];
+
+  if (!state.rankOverrides) state.rankOverrides = {};
+  state.rankOverrides[blockId] = order;
+
+  saveState();
+  renderLeague();
+});
+
+/* ═══════════════════════════════════════════════════════════
+   ユーティリティ
+══════════════════════════════════════════════════════════ */
+function esc(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/* ═══════════════════════════════════════════════════════════
+   起動
+══════════════════════════════════════════════════════════ */
+loadState();
+allMatches = buildMatches(state.teams);
+renderTeamList();
+</script>
+</body>
+</html>
