@@ -185,6 +185,55 @@ body {
   font-size: 0.75em; color: #718096;
   padding: 5px 10px 7px; text-align: right; font-style: italic;
 }
+
+/* ─── Tournament Bracket ────────────────────────────────── */
+.tn-match {
+  background: white; border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  overflow: hidden;
+}
+.tn-match.tn-decided { border-color: #fc8181; }
+.tn-team {
+  display: flex; align-items: center;
+  padding: 4px 5px; min-height: 27px; gap: 4px;
+}
+.tn-team.tn-winner { background: #fff5f5; }
+.tn-name {
+  flex: 1; font-size: 0.74em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tn-winner .tn-name { color: #c53030; font-weight: bold; }
+.tn-tbd { color: #a0aec0; font-style: italic; }
+.tn-divider { height: 1px; background: #e2e8f0; }
+.tn-score-inp {
+  width: 28px; height: 22px;
+  border: 1px solid #cbd5e0; border-radius: 3px;
+  text-align: center; font-size: 0.8em; font-weight: bold;
+  color: #2d3748; background: #f7fafc;
+  flex-shrink: 0;
+  -moz-appearance: textfield; appearance: textfield;
+}
+.tn-score-inp::-webkit-inner-spin-button,
+.tn-score-inp::-webkit-outer-spin-button { -webkit-appearance: none; }
+.tn-score-inp:focus { border-color: #4299e1; background: #fff; outline: none; }
+.tn-score-inp.filled { border-color: #48bb78; background: #f0fff4; }
+.tn-score-inp:disabled { opacity: 0.4; cursor: not-allowed; }
+.tn-draw-note {
+  font-size: 0.68em; color: #e53e3e; text-align: center;
+  padding: 2px 5px; background: #fff5f5; border-top: 1px solid #fed7d7;
+}
+
+/* ─── Reset Button ──────────────────────────────────────── */
+.header-actions { text-align: center; margin-top: 6px; }
+.reset-btn {
+  font-size: 0.72em; padding: 3px 12px;
+  background: rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.75);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 4px; cursor: pointer;
+}
+.reset-btn:hover { background: rgba(200,0,0,0.4); color: #fff; }
 </style>
 </head>
 <body>
@@ -192,6 +241,9 @@ body {
 <header class="site-header">
   <h1>⚽ OJIMAわんぱく対戦表 2025夏</h1>
   <p>第37回 OJIMA わんぱくサッカー大会</p>
+  <div class="header-actions">
+    <button class="reset-btn" onclick="confirmReset()">データリセット</button>
+  </div>
 </header>
 
 <nav class="tab-nav">
@@ -205,12 +257,8 @@ body {
 <div id="pane-teamlist" class="tab-pane active"></div>
 <div id="pane-matches"  class="tab-pane"></div>
 <div id="pane-league"   class="tab-pane"></div>
-<div id="pane-final"    class="tab-pane">
-  <div class="coming-soon"><div class="icon">🏆</div><p>決勝トーナメント（Phase ③ 実装予定）</p></div>
-</div>
-<div id="pane-wanpaku"  class="tab-pane">
-  <div class="coming-soon"><div class="icon">🌟</div><p>わんぱくトーナメント（Phase ③ 実装予定）</p></div>
-</div>
+<div id="pane-final"    class="tab-pane"></div>
+<div id="pane-wanpaku"  class="tab-pane"></div>
 
 <script>
 'use strict';
@@ -251,6 +299,34 @@ const RR_ROUNDS = [
   [[0,2],[1,3]],
   [[0,3],[1,2]],
 ];
+
+/* 決勝/わんぱく 1回戦シード ([blockId, rank] ×2 per match) */
+const TN_SEEDINGS = {
+  final: [
+    [['A1',1],['C1',2]], [['C1',1],['A1',2]],
+    [['B1',1],['D1',2]], [['D1',1],['B1',2]],
+    [['A2',1],['C2',2]], [['C2',1],['A2',2]],
+    [['B2',1],['D2',2]], [['D2',1],['B2',2]],
+  ],
+  wanpaku: [
+    [['A1',3],['C1',4]], [['C1',3],['A1',4]],
+    [['B1',3],['D1',4]], [['D1',3],['B1',4]],
+    [['A2',3],['C2',4]], [['C2',3],['A2',4]],
+    [['B2',3],['D2',4]], [['D2',3],['B2',4]],
+  ],
+};
+
+/* ブラケット描画レイアウト */
+const TN_L = {
+  UNIT:    70,    // px per R1 slot
+  MATCH_H: 54,    // match box height
+  COL_W:   160,   // match box width
+  COL_GAP: 30,    // gap between columns
+  COL_X:   [0, 190, 380, 570],
+  MID_X:   [175, 365, 555],
+  SVG_W:   730,
+  SVG_H:   560,
+};
 
 /* 32チーム初期値 */
 const DEFAULT_TEAMS = [
@@ -340,8 +416,9 @@ function buildMatches(teams) {
 ══════════════════════════════════════════════════════════ */
 let state = {
   teams:        JSON.parse(JSON.stringify(DEFAULT_TEAMS)),
-  scores:       {},   // { matchId: { s1: number, s2: number } }
-  rankOverrides: {},  // { blockId: [teamId, teamId, teamId, teamId] }
+  scores:       {},
+  rankOverrides: {},
+  tnScores:     { final: {}, wanpaku: {} },
 };
 
 let allMatches = [];  // buildMatches キャッシュ
@@ -354,6 +431,7 @@ function loadState() {
     if (Array.isArray(saved.teams)) state.teams = saved.teams;
     if (saved.scores && typeof saved.scores === 'object') state.scores = saved.scores;
     if (saved.rankOverrides && typeof saved.rankOverrides === 'object') state.rankOverrides = saved.rankOverrides;
+    if (saved.tnScores  && typeof saved.tnScores  === 'object') state.tnScores  = saved.tnScores;
   } catch (_) { /* localStorage 使用不可の場合は無視 */ }
 }
 
@@ -363,6 +441,7 @@ function saveState() {
       teams:        state.teams,
       scores:       state.scores,
       rankOverrides: state.rankOverrides,
+      tnScores:     state.tnScores,
     }));
   } catch (_) {}
 }
@@ -384,6 +463,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'teamlist') renderTeamList();
     if (btn.dataset.tab === 'matches')  renderMatches();
     if (btn.dataset.tab === 'league')   renderLeague();
+    if (btn.dataset.tab === 'final')    renderBracketPane('final',   'pane-final');
+    if (btn.dataset.tab === 'wanpaku')  renderBracketPane('wanpaku', 'pane-wanpaku');
   });
 });
 
@@ -709,6 +790,211 @@ document.addEventListener('click', e => {
   saveState();
   renderLeague();
 });
+
+/* ═══════════════════════════════════════════════════════════
+   トーナメント ヘルパー
+══════════════════════════════════════════════════════════ */
+function tnCenterY(round, idx) {
+  const u = TN_L.UNIT * (1 << round);   // 70, 140, 280, 560
+  return idx * u + u / 2;
+}
+
+function tnMid(type, round, idx) {
+  return type + '-' + ['R1','QF','SF','F'][round] + '-' + idx;
+}
+
+function tnScore(type, round, idx) {
+  const mid = tnMid(type, round, idx);
+  return ((state.tnScores || {})[type] || {})[mid] || {};
+}
+
+function tnDecided(type, round, idx) {
+  const sc = tnScore(type, round, idx);
+  return sc.s1 !== undefined && sc.s2 !== undefined;
+}
+
+function getTeamFromLeague(blockId, rank) {
+  if (!allMatches.length) allMatches = buildMatches(state.teams);
+  const rows = computeStandings(blockId);
+  return rows && rows.length >= rank ? rows[rank - 1].team : null;
+}
+
+function tnMatchTeams(type, round, idx) {
+  if (round === 0) {
+    const [[b1,r1],[b2,r2]] = TN_SEEDINGS[type][idx];
+    return [getTeamFromLeague(b1, r1), getTeamFromLeague(b2, r2)];
+  }
+  return [tnWinner(type, round - 1, idx * 2),
+          tnWinner(type, round - 1, idx * 2 + 1)];
+}
+
+function tnWinner(type, round, idx) {
+  if (!tnDecided(type, round, idx)) return null;
+  const sc    = tnScore(type, round, idx);
+  const teams = tnMatchTeams(type, round, idx);
+  if (sc.s1 > sc.s2) return teams[0];
+  if (sc.s2 > sc.s1) return teams[1];
+  return null;   // draw → no auto-advance
+}
+
+/* ═══════════════════════════════════════════════════════════
+   トーナメント表描画
+══════════════════════════════════════════════════════════ */
+const TN_RED  = '#e53e3e';
+const TN_GRAY = '#d1d5db';
+
+function renderBracket(type) {
+  const L = TN_L;
+  const lines = [];
+
+  /* SVG コネクタ線 */
+  for (let r = 0; r < 3; r++) {
+    const n  = 8 >> r;       // 8, 4, 2 matches per round
+    const xR = L.COL_X[r] + L.COL_W;
+    const xM = L.MID_X[r];
+    const xL = L.COL_X[r + 1];
+
+    for (let i = 0; i < n; i += 2) {
+      const cy0 = tnCenterY(r, i);
+      const cy1 = tnCenterY(r, i + 1);
+      const cyN = tnCenterY(r + 1, i >> 1);
+      const d0  = tnDecided(type, r, i);
+      const d1  = tnDecided(type, r, i + 1);
+
+      const ln = (x1, y1, x2, y2, red) =>
+        '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 +
+        '" stroke="' + (red ? TN_RED : TN_GRAY) + '" stroke-width="' + (red ? 2 : 1) + '"/>';
+
+      lines.push(ln(xR, cy0, xM,  cy0, d0));          // stub upper
+      lines.push(ln(xR, cy1, xM,  cy1, d1));          // stub lower
+      lines.push(ln(xM, cy0, xM,  cyN, d0));          // vertical upper half
+      lines.push(ln(xM, cyN, xM,  cy1, d1));          // vertical lower half
+      lines.push(ln(xM, cyN, xL,  cyN, d0 && d1));   // horizontal to next round
+    }
+  }
+
+  /* マッチボックス */
+  const boxes = [];
+  for (let r = 0; r < 4; r++) {
+    const n = 8 >> r;    // 8, 4, 2, 1
+    for (let idx = 0; idx < n; idx++) {
+      const cy    = tnCenterY(r, idx);
+      const top   = Math.round(cy - L.MATCH_H / 2);
+      const left  = L.COL_X[r];
+      const mid   = tnMid(type, r, idx);
+      const teams = tnMatchTeams(type, r, idx);
+      const sc    = tnScore(type, r, idx);
+      const s1    = sc.s1 !== undefined ? sc.s1 : '';
+      const s2    = sc.s2 !== undefined ? sc.s2 : '';
+      const dec   = tnDecided(type, r, idx);
+      const win   = dec ? tnWinner(type, r, idx) : null;
+      const isDraw = dec && !win;
+      const t1    = teams[0], t2 = teams[1];
+      const t1win = !!(win && t1 && win.id === t1.id);
+      const t2win = !!(win && t2 && win.id === t2.id);
+      const canInput = !!(t1 && t2);
+
+      const nameSpan = (team, isWin) =>
+        '<span class="tn-name">' + (team ? esc(team.name) : '<em class="tn-tbd">未定</em>') + '</span>';
+
+      const scoreInp = (slot, val) =>
+        '<input class="tn-score-inp' + (val !== '' ? ' filled' : '') + '"' +
+        ' type="number" inputmode="numeric" min="0" max="99" value="' + val + '"' +
+        ' data-tntype="' + type + '" data-tnmid="' + mid + '" data-slot="' + slot + '"' +
+        (canInput ? '' : ' disabled') + '>';
+
+      boxes.push(
+        '<div class="tn-match' + (dec ? ' tn-decided' : '') + '" id="tm-' + mid + '"' +
+        ' style="position:absolute;left:' + left + 'px;top:' + top + 'px;width:' + L.COL_W + 'px;">' +
+        '<div class="tn-team' + (t1win ? ' tn-winner' : '') + '">' + nameSpan(t1, t1win) + scoreInp(0, s1) + '</div>' +
+        '<div class="tn-divider"></div>' +
+        '<div class="tn-team' + (t2win ? ' tn-winner' : '') + '">' + nameSpan(t2, t2win) + scoreInp(1, s2) + '</div>' +
+        (isDraw ? '<div class="tn-draw-note">引分—勝者を手入力で確定してください</div>' : '') +
+        '</div>'
+      );
+    }
+  }
+
+  return '<div style="position:relative;width:' + L.SVG_W + 'px;height:' + L.SVG_H + 'px;">' +
+    '<svg style="position:absolute;top:0;left:0;overflow:visible;pointer-events:none;" width="' + L.SVG_W + '" height="' + L.SVG_H + '">' +
+    lines.join('') + '</svg>' +
+    boxes.join('') + '</div>';
+}
+
+function renderBracketPane(type, paneId) {
+  if (!allMatches.length) allMatches = buildMatches(state.teams);
+  const title  = type === 'final' ? '決勝トーナメント' : 'わんぱくトーナメント';
+  const rounds = ['1回戦', '準々決勝', '準決勝', '決勝'];
+  const L = TN_L;
+
+  const headerRow =
+    '<div style="display:flex;width:' + L.SVG_W + 'px;margin-bottom:8px;">' +
+    rounds.map(function(lbl, i) {
+      return '<div style="width:' + L.COL_W + 'px;' +
+        (i > 0 ? 'margin-left:' + L.COL_GAP + 'px;' : '') +
+        'text-align:center;font-size:0.75em;font-weight:bold;color:#718096;">' + lbl + '</div>';
+    }).join('') + '</div>';
+
+  document.getElementById(paneId).innerHTML =
+    '<div style="padding:14px">' +
+    '<h2 style="font-size:0.95em;font-weight:bold;color:#4a5568;margin-bottom:10px;">' + title + '</h2>' +
+    '<div style="overflow-x:auto;">' + headerRow + renderBracket(type) + '</div></div>';
+}
+
+/* ─── トーナメントスコア入力ハンドラ ──────────────────── */
+document.addEventListener('focus', e => {
+  if (e.target.classList.contains('tn-score-inp')) e.target.select();
+}, true);
+
+document.addEventListener('input', e => {
+  const inp = e.target;
+  if (!inp.classList.contains('tn-score-inp')) return;
+
+  const type  = inp.dataset.tntype;
+  const mid   = inp.dataset.tnmid;
+  const slot  = inp.dataset.slot;
+  const key   = slot === '0' ? 's1' : 's2';
+  const raw   = inp.value.trim();
+
+  if (!state.tnScores)         state.tnScores = {};
+  if (!state.tnScores[type])   state.tnScores[type] = {};
+  if (!state.tnScores[type][mid]) state.tnScores[type][mid] = {};
+
+  if (raw === '' || isNaN(+raw)) {
+    delete state.tnScores[type][mid][key];
+  } else {
+    state.tnScores[type][mid][key] = Math.max(0, Math.floor(+raw));
+  }
+
+  saveState();
+
+  const paneId    = type === 'final' ? 'pane-final' : 'pane-wanpaku';
+  const focusMid  = mid;
+  const focusSlot = slot;
+  renderBracketPane(type, paneId);
+  const refocus = document.querySelector(
+    '[data-tntype="' + type + '"][data-tnmid="' + focusMid + '"][data-slot="' + focusSlot + '"]'
+  );
+  if (refocus) { refocus.focus(); refocus.select(); }
+});
+
+/* ═══════════════════════════════════════════════════════════
+   データリセット（Phase ④）
+══════════════════════════════════════════════════════════ */
+function confirmReset() {
+  if (!confirm('スコア・順位・トーナメント結果を全てリセットします。\nよろしいですか？（取り消し不可）')) return;
+  state.scores       = {};
+  state.rankOverrides = {};
+  state.tnScores     = { final: {}, wanpaku: {} };
+  saveState();
+  renderMatches();
+  renderLeague();
+  renderBracketPane('final',   'pane-final');
+  renderBracketPane('wanpaku', 'pane-wanpaku');
+  /* 現在表示中のタブを再描画 */
+  const activeTab = document.querySelector('.tab-btn.active');
+  if (activeTab) activeTab.click();
+}
 
 /* ═══════════════════════════════════════════════════════════
    ユーティリティ
