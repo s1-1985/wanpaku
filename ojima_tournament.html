@@ -194,6 +194,54 @@ body {
   padding: 5px 10px 7px; text-align: right; font-style: italic;
 }
 
+/* ─── League Cross Table ─────────────────────────────────── */
+.league-cross-table {
+  border-collapse: collapse;
+  font-size: 0.78em;
+  background: white;
+  width: 100%;
+}
+.league-cross-table th,
+.league-cross-table td {
+  border: 1px solid #cbd5e0;
+  padding: 3px 4px;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.lct-empty { min-width: 70px; background: #edf2f7; }
+.lct-col-hd { background: #edf2f7; padding: 4px 2px; vertical-align: bottom; }
+.lct-col-name {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 0.82em;
+  max-height: 72px;
+  overflow: hidden;
+  color: #2d3748;
+  display: block;
+}
+.lct-row-name {
+  text-align: left; padding-left: 5px;
+  font-size: 0.85em; background: #edf2f7;
+  max-width: 90px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.lct-diag { background: #718096; }
+.lct-result { min-width: 36px; font-size: 0.88em; letter-spacing: -0.5px; }
+.lct-win  { background: #f0fff4; }
+.lct-loss { background: #fff5f5; }
+.lct-draw { background: #fffff0; }
+.lct-stat-hd {
+  background: #edf2f7; color: #4a5568;
+  font-weight: bold; font-size: 0.75em; min-width: 26px;
+}
+.lct-stat { min-width: 24px; }
+.lct-pts  { font-weight: bold; min-width: 28px; }
+.lct-rank { font-weight: bold; }
+.lct-sym-win  { color: #276749; font-weight: bold; }
+.lct-sym-loss { color: #c53030; font-weight: bold; }
+.lct-sym-draw { color: #744210; font-weight: bold; }
+
 /* ─── Tournament Bracket ────────────────────────────────── */
 .tn-match {
   background: white; border-radius: 6px;
@@ -762,58 +810,83 @@ function renderLeague() {
   const cards = BLOCK_ORDER.map(blockId => {
     const meta     = BLOCK_META[blockId];
     const color    = BLOCK_COLORS[meta.letter];
+    const teams    = state.teams.filter(t => t.block === blockId);
     const rows     = computeStandings(blockId);
     const complete = isBlockComplete(blockId);
-    const blockHasTie = complete && rows.some(r => r.tiedAbove || r.tiedBelow);
 
-    const rankClass = r =>
-      r.rank === 1 ? 'rank-gold' : r.rank === 2 ? 'rank-silver' : r.rank === 3 ? 'rank-bronze' : '';
+    /* stats lookup by team id */
+    const statOf = {};
+    rows.forEach(r => { statOf[r.team.id] = r; });
 
-    const swapCol = complete && blockHasTie;
+    /* result cell: from rowTeam's perspective vs colTeam */
+    function cellHTML(rowId, colId) {
+      const m = allMatches.find(m => m.block === blockId &&
+        ((m.t1id === rowId && m.t2id === colId) ||
+         (m.t1id === colId && m.t2id === rowId)));
+      if (!m) return '';
+      const sc = state.scores[m.id];
+      if (!sc || sc.s1 === undefined || sc.s2 === undefined) return '';
+      const rs = m.t1id === rowId ? sc.s1 : sc.s2;
+      const cs = m.t1id === rowId ? sc.s2 : sc.s1;
+      if (rs > cs) return `${rs}<span class="lct-sym-win">◯</span>${cs}`;
+      if (rs < cs) return `${rs}<span class="lct-sym-loss">✖</span>${cs}`;
+      return `${rs}<span class="lct-sym-draw">△</span>${cs}`;
+    }
+
+    /* column headers (team names, vertical text) */
+    const colHds = teams.map(t =>
+      `<th class="lct-col-hd"><div class="lct-col-name">${esc(t.name)}</div></th>`
+    ).join('');
+
+    /* body rows: original team order */
+    const bodyRows = teams.map(rowTeam => {
+      const s     = statOf[rowTeam.id];
+      const gdStr = s.gd > 0 ? '+' + s.gd : String(s.gd);
+      const rkCls = s.rank === 1 ? 'rank-gold' : s.rank === 2 ? 'rank-silver' : s.rank === 3 ? 'rank-bronze' : '';
+
+      const resultCells = teams.map(colTeam => {
+        if (colTeam.id === rowTeam.id) return `<td class="lct-diag"></td>`;
+        const html = cellHTML(rowTeam.id, colTeam.id);
+        const bg = html.includes('lct-sym-win') ? ' lct-win'
+                 : html.includes('lct-sym-loss') ? ' lct-loss'
+                 : html ? ' lct-draw' : '';
+        return `<td class="lct-result${bg}">${html}</td>`;
+      }).join('');
+
+      return `<tr>
+        <td class="lct-row-name">${esc(rowTeam.name)}</td>
+        ${resultCells}
+        <td class="lct-pts">${s.pts}</td>
+        <td class="lct-stat">${s.w}</td>
+        <td class="lct-stat">${s.l}</td>
+        <td class="lct-stat">${s.d}</td>
+        <td class="lct-stat">${s.gf}</td>
+        <td class="lct-stat">${s.ga}</td>
+        <td class="lct-stat">${gdStr}</td>
+        <td class="lct-stat lct-rank ${rkCls}">${s.rank}</td>
+      </tr>`;
+    }).join('');
 
     return `<div class="league-card">
       <div class="league-card-hd" style="background:${color}">${meta.label}</div>
-      <table class="standings-table">
-        <thead><tr>
-          <th>順位</th>
-          <th style="text-align:left;padding-left:7px">チーム</th>
-          <th title="勝利数">勝</th>
-          <th title="引分け数">分</th>
-          <th title="敗北数">負</th>
-          <th title="総得点">得点</th>
-          <th title="総失点">失点</th>
-          <th title="得失点差">得失差</th>
-          <th title="勝点（勝×3＋引分）">勝点</th>
-          ${swapCol ? '<th title="同点タイの順位調整">入替</th>' : ''}
-        </tr></thead>
-        <tbody>
-          ${rows.map((row, idx) => {
-            const gdStr = row.gd > 0 ? '+' + row.gd : String(row.gd);
-            const gdCls = row.gd > 0 ? 'gd-pos' : row.gd < 0 ? 'gd-neg' : '';
-            const tieTag = (row.tiedAbove || row.tiedBelow)
-              ? '<span class="rank-tied">＝</span>' : '';
-            return `<tr>
-              <td class="rank-cell ${rankClass(row)}">${row.rank}${tieTag}</td>
-              <td class="sname-cell">${esc(row.team.name)}</td>
-              <td>${row.w}</td>
-              <td>${row.d}</td>
-              <td>${row.l}</td>
-              <td>${row.gf}</td>
-              <td>${row.ga}</td>
-              <td class="${gdCls}">${gdStr}</td>
-              <td class="pts-cell">${row.pts}</td>
-              ${swapCol ? `<td>${row.tiedAbove
-                ? `<button class="swap-btn" data-block="${blockId}" data-idx="${idx}" title="上のチームと順位を入れ替え（トーナメント順序調整用）">↑入替</button>`
-                : ''}</td>` : ''}
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
-      ${!complete
-        ? '<div class="tie-note" style="color:#a0aec0">リーグ戦進行中...</div>'
-        : blockHasTie
-          ? '<div class="tie-note">＝ タイ（↑入替でトーナメントの組み合わせ順を調整）</div>'
-          : ''}
+      <div style="overflow-x:auto">
+        <table class="league-cross-table">
+          <thead><tr>
+            <th class="lct-empty"></th>
+            ${colHds}
+            <th class="lct-stat-hd" title="勝ち点">勝点</th>
+            <th class="lct-stat-hd" title="勝">勝</th>
+            <th class="lct-stat-hd" title="負">負</th>
+            <th class="lct-stat-hd" title="引分">分</th>
+            <th class="lct-stat-hd" title="総得点">得点</th>
+            <th class="lct-stat-hd" title="総失点">失点</th>
+            <th class="lct-stat-hd" title="得失点差">得失差</th>
+            <th class="lct-stat-hd" title="順位">順位</th>
+          </tr></thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+      </div>
+      ${!complete ? '<div class="tie-note" style="color:#a0aec0">リーグ戦進行中...</div>' : ''}
     </div>`;
   });
 
