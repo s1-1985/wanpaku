@@ -906,74 +906,67 @@ function tnWinner(type, round, idx) {
 
 /* ═══════════════════════════════════════════════════════════
    トーナメント表描画（縦型・エクセル風）
+   構造: 各ラウンドを矩形ボックスで表し、ボックス底部から
+         ∩型の線で下の子ボックス/チーム枠へ接続
 ══════════════════════════════════════════════════════════ */
 function renderBracket(type) {
-  const COL_W  = 44;
-  const TEAM_H = 90;
-  const RND_H  = 68;
-  const PT     = 28;
+  const COL_W  = 40;   // チーム列幅
+  const TEAM_H = 88;   // チーム枠高さ（縦書き用）
+  const LVL_H  = 78;   // ラウンド間の中心距離
+  const BOX_H  = 28;   // 試合ボックス高さ
+  const BOX_W  = 64;   // 試合ボックス幅
+  const PT     = 32;   // 上部余白（優勝ラベル用）
   const N      = 16;
-  const SVG_W  = N * COL_W;
-  const SVG_H  = PT + 4 * RND_H + TEAM_H;
 
-  const cx  = col => col * COL_W + COL_W / 2;
+  const SVG_W    = N * COL_W;
+  const TEAM_TOP = PT + 4 * LVL_H;          // チーム枠の上端 y
+  const SVG_H    = TEAM_TOP + TEAM_H;
+
+  // チーム列の中心 x
+  const tcx = col => col * COL_W + COL_W / 2;
+  // ラウンド r・インデックス idx の試合の中心 x
   const mcx = (r, i) => (i * (1 << (r + 1)) + (1 << r)) * COL_W;
-  const my  = r => PT + (3 - r) * RND_H + RND_H / 2;
+  // ラウンド r の試合ボックス中心 y（r=3 が最上段=決勝）
+  const mcy = r => PT + (3 - r) * LVL_H;
 
-  let svg = '';
+  let svg  = '';
   let html = '';
 
-  /* ── チーム枠 ── */
-  for (let col = 0; col < N; col++) {
-    const bx = col * COL_W;
-    const by = SVG_H - TEAM_H;
-    const [ta, tb] = tnMatchTeams(type, 0, col >> 1);
-    const team = (col & 1) ? tb : ta;
-    const nm   = team ? esc(team.name) : '未定';
-    const fill = team ? '#2d3748' : '#a0aec0';
-    const fstyle = team ? 'normal' : 'italic';
-
-    svg +=
-      `<rect x="${bx}" y="${by}" width="${COL_W}" height="${TEAM_H}"` +
-      ` fill="white" stroke="#cbd5e0" stroke-width="1"/>` +
-      `<text x="${cx(col)}" y="${by + 6}" writing-mode="tb"` +
-      ` text-anchor="start" font-size="11" font-style="${fstyle}" fill="${fill}">${nm}</text>` +
-      `<line x1="${cx(col)}" y1="${by}" x2="${cx(col)}" y2="${my(0)}"` +
-      ` stroke="#cbd5e0" stroke-width="1.5"/>`;
-  }
-
-  /* ── ラウンドごとの線とスコア枠 ── */
+  /* ── ラウンドごとの試合ボックス＋接続線 ── */
   for (let r = 0; r < 4; r++) {
-    const num = N >> (r + 1);
+    const num = N >> (r + 1);  // 8, 4, 2, 1
 
     for (let idx = 0; idx < num; idx++) {
-      const MX = mcx(r, idx);
-      const MY = my(r);
-      const lx = r === 0 ? cx(idx * 2)     : mcx(r - 1, idx * 2);
-      const rx = r === 0 ? cx(idx * 2 + 1) : mcx(r - 1, idx * 2 + 1);
+      const MX  = mcx(r, idx);
+      const MY  = mcy(r);
+      const bx  = MX - BOX_W / 2;
+      const by  = MY - BOX_H / 2;
+      const bot = by + BOX_H;   // ボックス底面 y
 
-      /* 水平バー */
-      svg += `<line x1="${lx}" y1="${MY}" x2="${rx}" y2="${MY}" stroke="#4a5568" stroke-width="1.5"/>`;
+      // 子要素の中心 x（r=0 はチーム列、r>0 は子ラウンドの試合中心）
+      const lx = r === 0 ? tcx(idx * 2)     : mcx(r - 1, idx * 2);
+      const rx = r === 0 ? tcx(idx * 2 + 1) : mcx(r - 1, idx * 2 + 1);
+      // 子要素の上端 y
+      const childTopY = r === 0 ? TEAM_TOP : mcy(r - 1) - BOX_H / 2;
+      // 水平バーの y（ボックス底と子上端の中間）
+      const barY = Math.round((bot + childTopY) / 2);
 
-      /* 子ラウンドから上がってくる縦線 */
-      if (r > 0) {
-        const py = my(r - 1);
+      // ボックス底 → 水平バーへの縦線
+      svg += `<line x1="${MX}" y1="${bot}" x2="${MX}" y2="${barY}" stroke="#4a5568" stroke-width="1.2"/>`;
+      // 水平バー（左子 ～ 右子）
+      svg += `<line x1="${lx}" y1="${barY}" x2="${rx}" y2="${barY}" stroke="#4a5568" stroke-width="1.2"/>`;
+      // 水平バー → 各子上端への縦線
+      svg += `<line x1="${lx}" y1="${barY}" x2="${lx}" y2="${childTopY}" stroke="#4a5568" stroke-width="1.2"/>`;
+      svg += `<line x1="${rx}" y1="${barY}" x2="${rx}" y2="${childTopY}" stroke="#4a5568" stroke-width="1.2"/>`;
+
+      // 決勝ボックス上部の優勝ライン
+      if (r === 3) {
         svg +=
-          `<line x1="${lx}" y1="${py}" x2="${lx}" y2="${MY}" stroke="#cbd5e0" stroke-width="1.5"/>` +
-          `<line x1="${rx}" y1="${py}" x2="${rx}" y2="${MY}" stroke="#cbd5e0" stroke-width="1.5"/>`;
+          `<line x1="${MX}" y1="${by}" x2="${MX}" y2="${PT + 2}" stroke="#b7791f" stroke-width="2"/>` +
+          `<text x="${MX}" y="${PT - 4}" text-anchor="middle" font-size="12" font-weight="bold" fill="#b7791f">優勝</text>`;
       }
 
-      /* 親ラウンドへの縦線 / 優勝マーカー */
-      if (r < 3) {
-        svg += `<line x1="${MX}" y1="${MY}" x2="${MX}" y2="${my(r + 1)}" stroke="#cbd5e0" stroke-width="1.5"/>`;
-      } else {
-        svg +=
-          `<line x1="${MX}" y1="${MY}" x2="${MX}" y2="${PT + 4}" stroke="#b7791f" stroke-width="2"/>` +
-          `<text x="${MX}" y="${PT - 2}" text-anchor="middle" font-size="12"` +
-          ` font-weight="bold" fill="#b7791f">優勝</text>`;
-      }
-
-      /* スコア入力ボックス */
+      // 試合ボックス（SVG矩形）
       const mid   = tnMid(type, r, idx);
       const sc    = tnScore(type, r, idx);
       const dec   = tnDecided(type, r, idx);
@@ -981,20 +974,41 @@ function renderBracket(type) {
       const s1    = sc.s1 !== undefined ? sc.s1 : '';
       const s2    = sc.s2 !== undefined ? sc.s2 : '';
       const can   = !!(teams[0] && teams[1]);
-      const bw = 62, bh = 24;
+      const boxFill = dec ? '#f0fff4' : 'white';
+      const boxStroke = dec ? '#68d391' : '#4a5568';
 
+      svg += `<rect x="${bx}" y="${by}" width="${BOX_W}" height="${BOX_H}"` +
+        ` fill="${boxFill}" stroke="${boxStroke}" stroke-width="1.2"/>`;
+
+      // スコア入力 HTML オーバーレイ（ボックス内）
       html +=
-        `<div id="bm-${mid}" style="position:absolute;left:${MX - bw / 2}px;top:${MY - bh / 2}px;width:${bw}px">` +
-        `<div class="vb-match${dec ? ' vb-match-done' : ''}">` +
+        `<div id="bm-${mid}" style="position:absolute;left:${bx + 2}px;top:${by + 3}px;width:${BOX_W - 4}px">` +
+        `<div style="display:flex;align-items:center;justify-content:center;gap:1px">` +
         `<input class="tn-score-inp${s1 !== '' ? ' filled' : ''}" type="number" inputmode="numeric"` +
         ` min="0" max="99" value="${s1}" data-tntype="${type}" data-tnmid="${mid}" data-slot="0"` +
-        ` style="width:24px;height:22px;font-size:0.82em"${can ? '' : ' disabled'}>` +
-        `<span style="color:#a0aec0;font-size:0.8em;margin:0 1px">-</span>` +
+        ` style="width:22px;height:22px;font-size:0.78em;border-radius:2px"${can ? '' : ' disabled'}>` +
+        `<span style="color:#a0aec0;font-size:0.75em">-</span>` +
         `<input class="tn-score-inp${s2 !== '' ? ' filled' : ''}" type="number" inputmode="numeric"` +
         ` min="0" max="99" value="${s2}" data-tntype="${type}" data-tnmid="${mid}" data-slot="1"` +
-        ` style="width:24px;height:22px;font-size:0.82em"${can ? '' : ' disabled'}>` +
+        ` style="width:22px;height:22px;font-size:0.78em;border-radius:2px"${can ? '' : ' disabled'}>` +
         `</div></div>`;
     }
+  }
+
+  /* ── チーム枠（最下段・縦書き） ── */
+  for (let col = 0; col < N; col++) {
+    const x = col * COL_W;
+    const y = TEAM_TOP;
+    const [ta, tb] = tnMatchTeams(type, 0, col >> 1);
+    const team  = (col & 1) ? tb : ta;
+    const nm    = team ? esc(team.name) : '未定';
+    const fill  = team ? '#2d3748' : '#a0aec0';
+    const fstyle = team ? 'normal' : 'italic';
+
+    svg +=
+      `<rect x="${x}" y="${y}" width="${COL_W}" height="${TEAM_H}" fill="white" stroke="#4a5568" stroke-width="1"/>` +
+      `<text x="${x + COL_W / 2}" y="${y + 6}" writing-mode="tb"` +
+      ` text-anchor="start" font-size="11" font-style="${fstyle}" fill="${fill}">${nm}</text>`;
   }
 
   return `<div style="position:relative;width:${SVG_W}px;height:${SVG_H}px">` +
