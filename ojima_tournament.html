@@ -320,6 +320,16 @@ tr.drag-over td { background: #bee3f8 !important; }
   padding: 1px 2px; box-shadow: 0 1px 2px rgba(0,0,0,0.08);
 }
 .vb-match.vb-match-done { border-color: #68d391; background: #f0fff4; }
+
+/* ─── PK ボタン ─────────────────────────────────────────── */
+.tn-pk-btn {
+  font-size: 0.72em; padding: 2px 6px;
+  background: #edf2f7; color: #4a5568;
+  border: 1px solid #e2e8f0; border-radius: 4px;
+  cursor: pointer; margin: 0 3px;
+}
+.tn-pk-btn:hover { background: #bee3f8; }
+.tn-pk-sel { background: #fc8181 !important; color: white !important; border-color: #e53e3e !important; font-weight: bold; }
 </style>
 </head>
 <body>
@@ -327,9 +337,6 @@ tr.drag-over td { background: #bee3f8 !important; }
 <header class="site-header">
   <h1>⚽ OJIMAわんぱく対戦表 2025夏</h1>
   <p>第37回 OJIMA わんぱくサッカー大会</p>
-  <div class="header-actions">
-    <button class="reset-btn" onclick="confirmReset()">データリセット</button>
-  </div>
 </header>
 
 <nav class="tab-nav">
@@ -386,30 +393,28 @@ const RR_ROUNDS = [
   [[0,3],[1,2]],
 ];
 
-/* 決勝/わんぱく 1回戦シード ([blockId, rank] ×2 per match) */
+/* 決勝/わんぱく 1回戦シード — ABコート・CDコート別 */
 const TN_SEEDINGS = {
-  final: [
-    [['A1',1],['C1',2]], [['C1',1],['A1',2]],
-    [['B1',1],['D1',2]], [['D1',1],['B1',2]],
-    [['A2',1],['C2',2]], [['C2',1],['A2',2]],
-    [['B2',1],['D2',2]], [['D2',1],['B2',2]],
-  ],
-  wanpaku: [
-    [['A1',3],['C1',4]], [['C1',3],['A1',4]],
-    [['B1',3],['D1',4]], [['D1',3],['B1',4]],
-    [['A2',3],['C2',4]], [['C2',3],['A2',4]],
-    [['B2',3],['D2',4]], [['D2',3],['B2',4]],
-  ],
-};
-
-/* ブラケット描画レイアウト */
-const TN_L = {
-  UNIT:    80,
-  MATCH_H: 60,
-  COL_W:   175,
-  COL_GAP: 45,
-  COL_X:   [0, 220, 440, 660],
-  SVG_W:   835,
+  final: {
+    ab: [
+      [['A1',1],['C1',2]], [['C1',1],['A1',2]],
+      [['B1',1],['D1',2]], [['D1',1],['B1',2]],
+    ],
+    cd: [
+      [['A2',1],['C2',2]], [['C2',1],['A2',2]],
+      [['B2',1],['D2',2]], [['D2',1],['B2',2]],
+    ],
+  },
+  wanpaku: {
+    ab: [
+      [['A1',3],['C1',4]], [['C1',3],['A1',4]],
+      [['B1',3],['D1',4]], [['D1',3],['B1',4]],
+    ],
+    cd: [
+      [['A2',3],['C2',4]], [['C2',3],['A2',4]],
+      [['B2',3],['D2',4]], [['D2',3],['B2',4]],
+    ],
+  },
 };
 
 /* 32チーム初期値 */
@@ -1062,24 +1067,81 @@ document.addEventListener('change', e => {
 
 /* ═══════════════════════════════════════════════════════════
    トーナメント ヘルパー
+   matchKey 書式:
+     ab_r1_0〜ab_r1_3, ab_wqf_0, ab_wqf_1, ab_lqf_0, ab_lqf_1,
+     ab_wf, ab_lf  /  cd_* 同様  /  gf
 ══════════════════════════════════════════════════════════ */
-function tnCenterY(round, idx) {
-  const u = TN_L.UNIT * (1 << round);   // 70, 140, 280, 560
-  return idx * u + u / 2;
+function tnScore2(type, key) {
+  return ((state.tnScores || {})[type] || {})[key] || {};
 }
 
-function tnMid(type, round, idx) {
-  return type + '-' + ['R1','QF','SF','F'][round] + '-' + idx;
-}
-
-function tnScore(type, round, idx) {
-  const mid = tnMid(type, round, idx);
-  return ((state.tnScores || {})[type] || {})[mid] || {};
-}
-
-function tnDecided(type, round, idx) {
-  const sc = tnScore(type, round, idx);
+function tnDecided2(type, key) {
+  const sc = tnScore2(type, key);
   return sc.s1 !== undefined && sc.s2 !== undefined;
+}
+
+function tnWinner2(type, key) {
+  if (!tnDecided2(type, key)) return null;
+  const sc = tnScore2(type, key);
+  const [t1, t2] = tnMatchTeams2(type, key);
+  if (sc.s1 > sc.s2) return t1;
+  if (sc.s2 > sc.s1) return t2;
+  if (sc.pk === 0) return t1;
+  if (sc.pk === 1) return t2;
+  return null;
+}
+
+function tnLoser2(type, key) {
+  if (!tnDecided2(type, key)) return null;
+  const sc = tnScore2(type, key);
+  const [t1, t2] = tnMatchTeams2(type, key);
+  if (sc.s1 > sc.s2) return t2;
+  if (sc.s2 > sc.s1) return t1;
+  if (sc.pk === 0) return t2;
+  if (sc.pk === 1) return t1;
+  return null;
+}
+
+function tnMatchTeams2(type, key) {
+  if (key === 'gf') {
+    return [tnWinner2(type, 'ab_wf'), tnWinner2(type, 'cd_wf')];
+  }
+  const us = key.indexOf('_');
+  const court = key.slice(0, us);
+  const mid   = key.slice(us + 1);
+
+  if (mid.startsWith('r1_')) {
+    const idx = parseInt(mid.slice(3), 10);
+    const [[b1,r1],[b2,r2]] = TN_SEEDINGS[type][court][idx];
+    return [getTeamFromLeague(b1, r1), getTeamFromLeague(b2, r2)];
+  }
+  if (mid.startsWith('wqf_')) {
+    const idx = parseInt(mid.slice(4), 10);
+    return [tnWinner2(type, court + '_r1_' + (idx * 2)),
+            tnWinner2(type, court + '_r1_' + (idx * 2 + 1))];
+  }
+  if (mid.startsWith('lqf_')) {
+    const idx = parseInt(mid.slice(4), 10);
+    return [tnLoser2(type, court + '_r1_' + (idx * 2)),
+            tnLoser2(type, court + '_r1_' + (idx * 2 + 1))];
+  }
+  if (mid === 'wf') {
+    return [tnWinner2(type, court + '_wqf_0'), tnWinner2(type, court + '_wqf_1')];
+  }
+  if (mid === 'lf') {
+    return [tnWinner2(type, court + '_lqf_0'), tnWinner2(type, court + '_lqf_1')];
+  }
+  return [null, null];
+}
+
+function tnWinSide2(type, key) {
+  if (!tnDecided2(type, key)) return -1;
+  const sc = tnScore2(type, key);
+  if (sc.s1 > sc.s2) return 0;
+  if (sc.s2 > sc.s1) return 1;
+  if (sc.pk === 0) return 0;
+  if (sc.pk === 1) return 1;
+  return -1;
 }
 
 function isBlockComplete(blockId) {
@@ -1098,209 +1160,294 @@ function getTeamFromLeague(blockId, rank) {
   return rows && rows.length >= rank ? rows[rank - 1].team : null;
 }
 
-function tnMatchTeams(type, round, idx) {
-  if (round === 0) {
-    const [[b1,r1],[b2,r2]] = TN_SEEDINGS[type][idx];
-    return [getTeamFromLeague(b1, r1), getTeamFromLeague(b2, r2)];
-  }
-  return [tnWinner(type, round - 1, idx * 2),
-          tnWinner(type, round - 1, idx * 2 + 1)];
-}
-
-function tnWinner(type, round, idx) {
-  if (!tnDecided(type, round, idx)) return null;
-  const sc    = tnScore(type, round, idx);
-  const teams = tnMatchTeams(type, round, idx);
-  if (sc.s1 > sc.s2) return teams[0];
-  if (sc.s2 > sc.s1) return teams[1];
-  return null;   // draw → no auto-advance
-}
 
 /* ═══════════════════════════════════════════════════════════
-   トーナメント表描画（縦型・エクセル風）
-   構造: 各ラウンドを矩形ボックスで表し、ボックス底部から
-         ∩型の線で下の子ボックス/チーム枠へ接続
+   トーナメント表描画（ABコート左・CDコート右・ルーザーズ有）
 ══════════════════════════════════════════════════════════ */
 function renderBracket(type) {
-  const COL_W  = 40;   // チーム列幅
-  const TEAM_H = 88;   // チーム枠高さ（縦書き用）
-  const LVL_H  = 78;   // ラウンド間の中心距離
-  const BOX_H  = 28;   // 試合ボックス高さ
-  const BOX_W  = 64;   // 試合ボックス幅
-  const PT     = 32;   // 上部余白（優勝ラベル用）
-  const N      = 16;
+  const COL_W   = 40;
+  const TEAM_H  = 88;
+  const LVL_H   = 78;
+  const N       = 8;          // チーム数/コート
+  const AB_OFF  = 0;
+  const CD_OFF  = N * COL_W + 120;   // 320 + 120 = 440
+  const SVG_W   = 2 * N * COL_W + 120;  // 760
 
-  const SVG_W    = N * COL_W;
-  const TEAM_TOP = PT + 4 * LVL_H;          // チーム枠の上端 y
-  const SVG_H    = TEAM_TOP + TEAM_H;
+  const GF_Y    = 32;
+  const WF_Y    = 110;
+  const WQF_Y   = WF_Y + LVL_H;     // 188
+  const R1_Y    = WF_Y + 2 * LVL_H; // 266
+  const TEAM_TOP = WF_Y + 3 * LVL_H;// 344
+  const TEAM_BOT = TEAM_TOP + TEAM_H;// 432
+  const LQF_Y   = TEAM_BOT + 30;    // 462
+  const LF_Y    = LQF_Y + 70;       // 532
+  const SVG_H   = LF_Y + 44;        // 576
 
-  // チーム列の中心 x
-  const tcx = col => col * COL_W + COL_W / 2;
-  // ラウンド r・インデックス idx の試合の中心 x
-  const mcx = (r, i) => (i * (1 << (r + 1)) + (1 << r)) * COL_W;
-  // ラウンド r の試合ボックス中心 y（r=3 が最上段=決勝）
-  const mcy = r => PT + (3 - r) * LVL_H;
+  // コート内 X 座標
+  const tcx   = (off, col) => off + col * COL_W + COL_W / 2;
+  const r1cx  = (off, i)   => off + i * 2 * COL_W + COL_W;
+  const wqfcx = (off, j)   => off + j * 4 * COL_W + 2 * COL_W;
+  const wfcx  = (off)      => off + 4 * COL_W;
+
+  const GF_X = (wfcx(AB_OFF) + wfcx(CD_OFF)) / 2;  // 380
+
+  const G = '#4a5568', SW = '1.2';
+  const R = '#e53e3e', RW = '2.5';
 
   let svg = '';
 
-  /* ── ラウンドごとの試合ボックス＋接続線 ── */
-  for (let r = 0; r < 4; r++) {
-    const num = N >> (r + 1);
+  function line(x1, y1, x2, y2, s, w) {
+    svg += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${s}" stroke-width="${w}"/>`;
+  }
 
-    for (let idx = 0; idx < num; idx++) {
-      const MX = mcx(r, idx);
-      const MY = mcy(r);
+  function drawWBracketLines(off) {
+    // R1: 4 matches, each 2 adjacent team columns
+    for (let i = 0; i < 4; i++) {
+      const mx = r1cx(off, i), lx = tcx(off, i*2), rx = tcx(off, i*2+1);
+      const by = Math.round((R1_Y + TEAM_TOP) / 2);
+      line(mx,R1_Y,mx,by,G,SW); line(lx,by,rx,by,G,SW);
+      line(lx,by,lx,TEAM_TOP,G,SW); line(rx,by,rx,TEAM_TOP,G,SW);
+    }
+    // WQF: 2 matches
+    for (let j = 0; j < 2; j++) {
+      const mx = wqfcx(off,j), lx = r1cx(off,j*2), rx = r1cx(off,j*2+1);
+      const by = Math.round((WQF_Y + R1_Y) / 2);
+      line(mx,WQF_Y,mx,by,G,SW); line(lx,by,rx,by,G,SW);
+      line(lx,by,lx,R1_Y,G,SW); line(rx,by,rx,R1_Y,G,SW);
+    }
+    // WF
+    {
+      const mx = wfcx(off), lx = wqfcx(off,0), rx = wqfcx(off,1);
+      const by = Math.round((WF_Y + WQF_Y) / 2);
+      line(mx,WF_Y,mx,by,G,SW); line(lx,by,rx,by,G,SW);
+      line(lx,by,lx,WQF_Y,G,SW); line(rx,by,rx,WQF_Y,G,SW);
+    }
+  }
 
-      // ボックスなしなので線はラウンド中心点から直接つなぐ
-      const lx = r === 0 ? tcx(idx * 2)     : mcx(r - 1, idx * 2);
-      const rx = r === 0 ? tcx(idx * 2 + 1) : mcx(r - 1, idx * 2 + 1);
-      const childY = r === 0 ? TEAM_TOP : mcy(r - 1);
-      const barY   = Math.round((MY + childY) / 2);
+  function drawLBracketLines(off) {
+    // LQF: 2 matches — same x as WQF, below team boxes
+    for (let j = 0; j < 2; j++) {
+      const mx = wqfcx(off,j), lx = r1cx(off,j*2), rx = r1cx(off,j*2+1);
+      const by = Math.round((TEAM_BOT + LQF_Y) / 2);
+      line(mx,LQF_Y,mx,by,G,SW); line(lx,by,rx,by,G,SW);
+      line(lx,by,lx,TEAM_BOT,G,SW); line(rx,by,rx,TEAM_BOT,G,SW);
+    }
+    // LF — same x as WF
+    {
+      const mx = wfcx(off), lx = wqfcx(off,0), rx = wqfcx(off,1);
+      const by = Math.round((LQF_Y + LF_Y) / 2);
+      line(mx,LF_Y,mx,by,G,SW); line(lx,by,rx,by,G,SW);
+      line(lx,by,lx,LQF_Y,G,SW); line(rx,by,rx,LQF_Y,G,SW);
+    }
+  }
 
-      // 中心から水平バーへの縦線
-      svg += `<line x1="${MX}" y1="${MY}" x2="${MX}" y2="${barY}" stroke="#4a5568" stroke-width="1.2"/>`;
-      // 水平バー
-      svg += `<line x1="${lx}" y1="${barY}" x2="${rx}" y2="${barY}" stroke="#4a5568" stroke-width="1.2"/>`;
-      // 水平バーから各子へ
-      svg += `<line x1="${lx}" y1="${barY}" x2="${lx}" y2="${childY}" stroke="#4a5568" stroke-width="1.2"/>`;
-      svg += `<line x1="${rx}" y1="${barY}" x2="${rx}" y2="${childY}" stroke="#4a5568" stroke-width="1.2"/>`;
+  function drawRedPath(x1, y1, x2, y2, mx, my) {
+    // child→bar→center vertical
+    line(x1,y1,x1,y2,R,RW); line(x1,y2,mx,y2,R,RW); line(mx,y2,mx,my,R,RW);
+  }
 
-      // 決勝：中心から上へ優勝ライン
-      if (r === 3) {
-        svg +=
-          `<line x1="${MX}" y1="${MY}" x2="${MX}" y2="${PT + 2}" stroke="#b7791f" stroke-width="2"/>` +
-          `<text x="${MX}" y="${PT - 4}" text-anchor="middle" font-size="12" font-weight="bold" fill="#b7791f">優勝</text>`;
+  function overlayWinners(off, court) {
+    // R1
+    for (let i = 0; i < 4; i++) {
+      const ws = tnWinSide2(type, court+'_r1_'+i); if (ws<0) continue;
+      const mx = r1cx(off,i), lx = tcx(off,i*2), rx = tcx(off,i*2+1);
+      const by = Math.round((R1_Y+TEAM_TOP)/2);
+      drawRedPath(ws===0?lx:rx, TEAM_TOP, by, mx, R1_Y);
+    }
+    // WQF
+    for (let j = 0; j < 2; j++) {
+      const ws = tnWinSide2(type, court+'_wqf_'+j); if (ws<0) continue;
+      const mx = wqfcx(off,j), lx = r1cx(off,j*2), rx = r1cx(off,j*2+1);
+      const by = Math.round((WQF_Y+R1_Y)/2);
+      drawRedPath(ws===0?lx:rx, R1_Y, by, mx, WQF_Y);
+    }
+    // WF
+    {
+      const ws = tnWinSide2(type, court+'_wf'); if (ws>=0) {
+        const mx = wfcx(off), lx = wqfcx(off,0), rx = wqfcx(off,1);
+        const by = Math.round((WF_Y+WQF_Y)/2);
+        drawRedPath(ws===0?lx:rx, WQF_Y, by, mx, WF_Y);
+      }
+    }
+    // LQF
+    for (let j = 0; j < 2; j++) {
+      const ws = tnWinSide2(type, court+'_lqf_'+j); if (ws<0) continue;
+      const mx = wqfcx(off,j), lx = r1cx(off,j*2), rx = r1cx(off,j*2+1);
+      const by = Math.round((TEAM_BOT+LQF_Y)/2);
+      drawRedPath(ws===0?lx:rx, TEAM_BOT, by, mx, LQF_Y);
+    }
+    // LF
+    {
+      const ws = tnWinSide2(type, court+'_lf'); if (ws>=0) {
+        const mx = wfcx(off), lx = wqfcx(off,0), rx = wqfcx(off,1);
+        const by = Math.round((LQF_Y+LF_Y)/2);
+        drawRedPath(ws===0?lx:rx, LQF_Y, by, mx, LF_Y);
       }
     }
   }
 
-  /* ── 勝者パス：赤い中太線でオーバーレイ ── */
-  for (let r = 0; r < 4; r++) {
-    const num = N >> (r + 1);
-    for (let idx = 0; idx < num; idx++) {
-      if (!tnDecided(type, r, idx)) continue;
-      const sc = tnScore(type, r, idx);
-      if (sc.s1 === sc.s2) continue;   // 引き分けは勝者なし
-
-      const MX     = mcx(r, idx);
-      const MY     = mcy(r);
-      const lx     = r === 0 ? tcx(idx * 2)     : mcx(r - 1, idx * 2);
-      const rx     = r === 0 ? tcx(idx * 2 + 1) : mcx(r - 1, idx * 2 + 1);
-      const childY = r === 0 ? TEAM_TOP : mcy(r - 1);
-      const barY   = Math.round((MY + childY) / 2);
-      const winX   = sc.s1 > sc.s2 ? lx : rx;   // 勝ち側の子x
-
-      const R = '#e53e3e', W = '2.5';
-      // 1. 勝者の子→現バーへの縦線
-      svg += `<line x1="${winX}" y1="${childY}" x2="${winX}" y2="${barY}" stroke="${R}" stroke-width="${W}"/>`;
-      // 2. 現バー上の勝者側横線（子x→試合中心x）
-      svg += `<line x1="${winX}" y1="${barY}" x2="${MX}" y2="${barY}" stroke="${R}" stroke-width="${W}"/>`;
-      // 3. 現バー→試合中心の縦線
-      svg += `<line x1="${MX}" y1="${barY}" x2="${MX}" y2="${MY}" stroke="${R}" stroke-width="${W}"/>`;
-      // 4. 上位ラウンドへの接続（または優勝ラインへ）
-      if (r < 3) {
-        const pBarY = Math.round((MY + mcy(r + 1)) / 2);
-        const pMX   = mcx(r + 1, idx >> 1);
-        svg += `<line x1="${MX}" y1="${MY}" x2="${MX}" y2="${pBarY}" stroke="${R}" stroke-width="${W}"/>`;
-        svg += `<line x1="${MX}" y1="${pBarY}" x2="${pMX}" y2="${pBarY}" stroke="${R}" stroke-width="${W}"/>`;
-      } else {
-        svg += `<line x1="${MX}" y1="${MY}" x2="${MX}" y2="${PT + 2}" stroke="${R}" stroke-width="${W}"/>`;
-      }
+  function drawTeamBoxes(off, court) {
+    for (let col = 0; col < N; col++) {
+      const x = off + col * COL_W, y = TEAM_TOP;
+      const r1idx = Math.floor(col / 2), slot = col % 2;
+      const [ta, tb] = tnMatchTeams2(type, court+'_r1_'+r1idx);
+      const team = slot === 0 ? ta : tb;
+      const nm = team ? esc(team.name) : '未定';
+      const fill = team ? '#2d3748' : '#a0aec0';
+      const fs   = team ? 'normal' : 'italic';
+      svg += `<rect x="${x}" y="${y}" width="${COL_W}" height="${TEAM_H}" fill="white" stroke="#4a5568" stroke-width="1"/>`;
+      svg += `<text x="${x+COL_W/2}" y="${y+6}" writing-mode="tb" text-anchor="start" font-size="11" font-style="${fs}" fill="${fill}">${nm}</text>`;
     }
   }
 
-  /* ── チーム枠（最下段・縦書き） ── */
-  for (let col = 0; col < N; col++) {
-    const x = col * COL_W;
-    const y = TEAM_TOP;
-    const [ta, tb] = tnMatchTeams(type, 0, col >> 1);
-    const team  = (col & 1) ? tb : ta;
-    const nm    = team ? esc(team.name) : '未定';
-    const fill  = team ? '#2d3748' : '#a0aec0';
-    const fstyle = team ? 'normal' : 'italic';
-
-    svg +=
-      `<rect x="${x}" y="${y}" width="${COL_W}" height="${TEAM_H}" fill="white" stroke="#4a5568" stroke-width="1"/>` +
-      `<text x="${x + COL_W / 2}" y="${y + 6}" writing-mode="tb"` +
-      ` text-anchor="start" font-size="11" font-style="${fstyle}" fill="${fill}">${nm}</text>`;
+  function courtLabel(off, label) {
+    const cx = off + 4 * COL_W;
+    svg += `<text x="${cx}" y="${TEAM_TOP-6}" text-anchor="middle" font-size="10" fill="#718096" font-weight="bold">${label}</text>`;
   }
+
+  function matchDot(x, y, num) {
+    svg += `<circle cx="${x}" cy="${y}" r="7" fill="#edf2f7" stroke="#a0aec0" stroke-width="0.8"/>`;
+    svg += `<text x="${x}" y="${y+3.5}" text-anchor="middle" font-size="7.5" fill="#4a5568">${num}</text>`;
+  }
+
+  // GF gray connecting lines
+  {
+    const abx = wfcx(AB_OFF), cdx = wfcx(CD_OFF);
+    const by = Math.round((GF_Y + WF_Y) / 2);
+    line(abx,WF_Y,abx,by,G,SW); line(cdx,WF_Y,cdx,by,G,SW);
+    line(abx,by,cdx,by,G,SW);   line(GF_X,by,GF_X,GF_Y,G,SW);
+    line(GF_X,GF_Y,GF_X,8,'#b7791f','2');
+    svg += `<text x="${GF_X}" y="6" text-anchor="middle" font-size="11" font-weight="bold" fill="#b7791f">優勝</text>`;
+  }
+
+  // GF red winner path
+  {
+    const ws = tnWinSide2(type,'gf');
+    if (ws >= 0) {
+      const abx = wfcx(AB_OFF), cdx = wfcx(CD_OFF);
+      const by = Math.round((GF_Y+WF_Y)/2);
+      const wx = ws===0 ? abx : cdx;
+      line(wx,WF_Y,wx,by,R,RW); line(wx,by,GF_X,by,R,RW); line(GF_X,by,GF_X,GF_Y,R,RW);
+    }
+  }
+
+  // Draw both courts
+  ['ab','cd'].forEach((court, ci) => {
+    const off = ci === 0 ? AB_OFF : CD_OFF;
+    drawWBracketLines(off);
+    drawLBracketLines(off);
+    drawTeamBoxes(off, court);
+    overlayWinners(off, court);
+    courtLabel(off, ci===0 ? 'ABコート' : 'CDコート');
+
+    // Match number dots
+    const cn = ci === 0 ? ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩']
+                        : ['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩'];
+    matchDot(r1cx(off,0), R1_Y, cn[0]);
+    matchDot(r1cx(off,1), R1_Y, cn[1]);
+    matchDot(r1cx(off,2), R1_Y, cn[2]);
+    matchDot(r1cx(off,3), R1_Y, cn[3]);
+    matchDot(wqfcx(off,0), LQF_Y, cn[4]);
+    matchDot(wqfcx(off,1), LQF_Y, cn[5]);
+    matchDot(wqfcx(off,0), WQF_Y, cn[6]);
+    matchDot(wqfcx(off,1), WQF_Y, cn[7]);
+    matchDot(wfcx(off), LF_Y, cn[8]);
+    matchDot(wfcx(off), WF_Y, cn[9]);
+  });
+
+  matchDot(GF_X, GF_Y, '⑪');
 
   return `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch">` +
-    `<div style="position:relative;width:${SVG_W}px;height:${SVG_H}px;min-width:${SVG_W}px">` +
-    `<svg style="position:absolute;top:0;left:0" width="${SVG_W}" height="${SVG_H}"` +
-    ` xmlns="http://www.w3.org/2000/svg">${svg}</svg>` +
-    `</div></div>`;
+    `<svg width="${SVG_W}" height="${SVG_H}" xmlns="http://www.w3.org/2000/svg"` +
+    ` style="display:block;min-width:${SVG_W}px">${svg}</svg></div>`;
 }
 
 function renderTnMatchList(type) {
-  const ROUND_DEF = [
-    { r: 0, label: '1回戦',    count: 8 },
-    { r: 1, label: '準々決勝', count: 4 },
-    { r: 2, label: '準決勝',   count: 2 },
-    { r: 3, label: '決勝',     count: 1 },
+  const COURT_ROUNDS = [
+    { key: 'r1_0',  no: '①', label: '1回戦' },
+    { key: 'r1_1',  no: '②', label: '1回戦' },
+    { key: 'r1_2',  no: '③', label: '1回戦' },
+    { key: 'r1_3',  no: '④', label: '1回戦' },
+    { key: 'lqf_0', no: '⑤', label: '負け戦' },
+    { key: 'lqf_1', no: '⑥', label: '負け戦' },
+    { key: 'wqf_0', no: '⑦', label: '準決勝' },
+    { key: 'wqf_1', no: '⑧', label: '準決勝' },
+    { key: 'lf',    no: '⑨', label: '3位決定' },
+    { key: 'wf',    no: '⑩', label: '決勝' },
   ];
 
-  let no = 0;
-  let rows = '';
+  function matchRow(fullKey, no, label) {
+    const sc    = tnScore2(type, fullKey);
+    const teams = fullKey === 'gf' ? [tnWinner2(type,'ab_wf'), tnWinner2(type,'cd_wf')]
+                                   : tnMatchTeams2(type, fullKey);
+    const [t1, t2] = teams;
+    const s1  = sc.s1 !== undefined ? sc.s1 : '';
+    const s2  = sc.s2 !== undefined ? sc.s2 : '';
+    const can = !!(t1 && t2);
+    const dec = sc.s1 !== undefined && sc.s2 !== undefined;
+    const draw = dec && sc.s1 === sc.s2;
+    const t1nm = t1 ? esc(t1.name) : '<em style="color:#a0aec0">未定</em>';
+    const t2nm = t2 ? esc(t2.name) : '<em style="color:#a0aec0">未定</em>';
+    const inpStyle = 'style="width:36px;height:32px;font-size:0.95em"';
 
-  ROUND_DEF.forEach(({ r, label, count }) => {
-    for (let idx = 0; idx < count; idx++) {
-      no++;
-      const mid   = tnMid(type, r, idx);
-      const sc    = tnScore(type, r, idx);
-      const dec   = tnDecided(type, r, idx);
-      const teams = tnMatchTeams(type, r, idx);
-      const t1    = teams[0];
-      const t2    = teams[1];
-      const s1    = sc.s1 !== undefined ? sc.s1 : '';
-      const s2    = sc.s2 !== undefined ? sc.s2 : '';
-      const can   = !!(t1 && t2);
+    let rows = `<tr class="${dec?'done':''}" id="tn-row-${fullKey}">` +
+      `<td class="col-no">${no}</td>` +
+      `<td style="text-align:center;font-size:0.75em;color:#718096;white-space:nowrap">${label}</td>` +
+      `<td class="col-t1">${t1nm}</td>` +
+      `<td class="col-score"><input class="tn-score-inp${s1!==''?' filled':''}" type="number" inputmode="numeric" min="0" max="99" value="${s1}" ${inpStyle} data-tntype="${type}" data-tnmid="${fullKey}" data-slot="0"${can?'':' disabled'}></td>` +
+      `<td class="col-sep">－</td>` +
+      `<td class="col-score"><input class="tn-score-inp${s2!==''?' filled':''}" type="number" inputmode="numeric" min="0" max="99" value="${s2}" ${inpStyle} data-tntype="${type}" data-tnmid="${fullKey}" data-slot="1"${can?'':' disabled'}></td>` +
+      `<td class="col-t2">${t2nm}</td>` +
+      `</tr>`;
 
-      rows +=
-        `<tr class="${dec ? 'done' : ''}" id="tn-row-${mid}">` +
-        `<td class="col-no">${no}</td>` +
-        `<td style="text-align:center;font-size:0.78em;color:#718096;white-space:nowrap">${label}</td>` +
-        `<td class="col-t1">${t1 ? esc(t1.name) : '<em style="color:#a0aec0">未定</em>'}</td>` +
-        `<td class="col-score"><input class="tn-score-inp${s1 !== '' ? ' filled' : ''}"` +
-        ` type="number" inputmode="numeric" min="0" max="99" value="${s1}"` +
-        ` style="width:40px;height:36px;font-size:1.05em"` +
-        ` data-tntype="${type}" data-tnmid="${mid}" data-slot="0"${can ? '' : ' disabled'}></td>` +
-        `<td class="col-sep">－</td>` +
-        `<td class="col-score"><input class="tn-score-inp${s2 !== '' ? ' filled' : ''}"` +
-        ` type="number" inputmode="numeric" min="0" max="99" value="${s2}"` +
-        ` style="width:40px;height:36px;font-size:1.05em"` +
-        ` data-tntype="${type}" data-tnmid="${mid}" data-slot="1"${can ? '' : ' disabled'}></td>` +
-        `<td class="col-t2">${t2 ? esc(t2.name) : '<em style="color:#a0aec0">未定</em>'}</td>` +
-        `</tr>`;
+    if (draw && can) {
+      const b1cls = 'tn-pk-btn' + (sc.pk===0 ? ' tn-pk-sel' : '');
+      const b2cls = 'tn-pk-btn' + (sc.pk===1 ? ' tn-pk-sel' : '');
+      rows += `<tr><td colspan="7" style="padding:3px 8px;background:#fff5f5;font-size:0.78em;text-align:center">` +
+        `PK勝者：` +
+        `<button class="${b1cls}" data-tntype="${type}" data-tnmid="${fullKey}" data-pkval="0">${t1?esc(t1.name):'?'}</button>` +
+        `<button class="${b2cls}" data-tntype="${type}" data-tnmid="${fullKey}" data-pkval="1">${t2?esc(t2.name):'?'}</button>` +
+        `</td></tr>`;
     }
-  });
+    return rows;
+  }
 
-  return '<div style="overflow-x:auto"><table class="match-table">' +
-    '<thead><tr>' +
-    '<th>No</th><th>ラウンド</th>' +
-    '<th style="text-align:right;padding-right:6px">チーム１</th>' +
-    '<th colspan="3">スコア</th>' +
-    '<th style="text-align:left;padding-left:6px">チーム２</th>' +
-    '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  function courtTable(court, courtLabel) {
+    const header = `<thead><tr>
+      <th style="width:22px">No</th>
+      <th style="font-size:0.8em">ラウンド</th>
+      <th style="text-align:right;padding-right:4px">チーム１</th>
+      <th colspan="3">スコア</th>
+      <th style="text-align:left;padding-left:4px">チーム２</th>
+    </tr></thead>`;
+    const rows = COURT_ROUNDS.map(rd => matchRow(court + '_' + rd.key, rd.no, rd.label)).join('');
+    return `<div>
+      <div style="font-size:0.8em;font-weight:bold;color:#718096;margin-bottom:4px;text-align:center">${courtLabel}</div>
+      <div style="overflow-x:auto"><table class="match-table" style="font-size:0.8em">${header}<tbody>${rows}</tbody></table></div>
+    </div>`;
+  }
+
+  const gfHeader = `<thead><tr>
+    <th>No</th><th>ラウンド</th>
+    <th style="text-align:right;padding-right:6px">チーム１</th>
+    <th colspan="3">スコア</th>
+    <th style="text-align:left;padding-left:6px">チーム２</th>
+  </tr></thead>`;
+
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">` +
+    courtTable('ab','ABコート') + courtTable('cd','CDコート') +
+    `</div>` +
+    `<div style="margin-bottom:6px;font-size:0.88em;font-weight:bold;color:#4a5568;border-bottom:2px solid #e2e8f0;padding-bottom:6px">グランドファイナル</div>` +
+    `<div style="overflow-x:auto"><table class="match-table" style="font-size:0.8em">${gfHeader}<tbody>${matchRow('gf','⑪','GF')}</tbody></table></div>`;
 }
 
 function renderBracketPane(type, paneId) {
   if (!allMatches.length) allMatches = buildMatches(state.teams);
   const title = type === 'final' ? '決勝トーナメント' : 'わんぱくトーナメント';
 
-  const allBlocks = [...new Set(TN_SEEDINGS[type].flatMap(([[b1], [b2]]) => [b1, b2]))];
-  const allDone   = allBlocks.every(b => isBlockComplete(b));
-
-  const note = allDone ? '' :
-    '<div style="font-size:0.8em;color:#718096;margin-bottom:10px;padding:8px 10px;' +
-    'background:#fffbeb;border:1px solid #f6e05e;border-radius:6px;">' +
-    '⚠️ リーグ戦が完了したブロックからトーナメント表に反映されます。未完了ブロックは「未定」で表示されます。' +
-    '</div>';
-
   document.getElementById(paneId).innerHTML =
     '<div style="padding:14px">' +
     `<h2 style="font-size:0.95em;font-weight:bold;color:#4a5568;margin-bottom:10px">${title}</h2>` +
-    note +
     renderBracket(type) +
     '<div style="margin:18px 0 8px;font-size:0.88em;font-weight:bold;color:#4a5568;' +
     'border-bottom:2px solid #e2e8f0;padding-bottom:6px">対戦リスト</div>' +
@@ -1317,52 +1464,59 @@ document.addEventListener('input', e => {
   const inp = e.target;
   if (!inp.classList.contains('tn-score-inp')) return;
 
-  const type  = inp.dataset.tntype;
-  const mid   = inp.dataset.tnmid;
-  const slot  = inp.dataset.slot;
-  const key   = slot === '0' ? 's1' : 's2';
-  const raw   = inp.value.trim();
+  const type = inp.dataset.tntype;
+  const mid  = inp.dataset.tnmid;
+  const slot = inp.dataset.slot;
+  const skey = slot === '0' ? 's1' : 's2';
+  const raw  = inp.value.trim();
 
-  if (!state.tnScores)         state.tnScores = {};
-  if (!state.tnScores[type])   state.tnScores[type] = {};
+  if (!state.tnScores)          state.tnScores = {};
+  if (!state.tnScores[type])    state.tnScores[type] = {};
   if (!state.tnScores[type][mid]) state.tnScores[type][mid] = {};
 
   if (raw === '' || isNaN(+raw)) {
-    delete state.tnScores[type][mid][key];
+    delete state.tnScores[type][mid][skey];
+    // score changed — clear PK if any
+    delete state.tnScores[type][mid].pk;
   } else {
-    state.tnScores[type][mid][key] = Math.max(0, Math.floor(+raw));
+    state.tnScores[type][mid][skey] = Math.max(0, Math.floor(+raw));
+    // if no longer a draw, clear PK
+    const sc = state.tnScores[type][mid];
+    if (sc.s1 !== undefined && sc.s2 !== undefined && sc.s1 !== sc.s2) {
+      delete sc.pk;
+    }
   }
 
   saveState();
-
-  const paneId    = type === 'final' ? 'pane-final' : 'pane-wanpaku';
-  const focusMid  = mid;
-  const focusSlot = slot;
+  const paneId = type === 'final' ? 'pane-final' : 'pane-wanpaku';
   renderBracketPane(type, paneId);
   const refocus = document.querySelector(
-    '[data-tntype="' + type + '"][data-tnmid="' + focusMid + '"][data-slot="' + focusSlot + '"]'
+    `[data-tntype="${type}"][data-tnmid="${mid}"][data-slot="${slot}"]`
   );
   if (refocus) { refocus.focus(); refocus.select(); }
 });
 
-/* ═══════════════════════════════════════════════════════════
-   データリセット（Phase ④）
-══════════════════════════════════════════════════════════ */
-function confirmReset() {
-  if (!confirm('スコア・順位・トーナメント結果を全てリセットします。\nよろしいですか？（取り消し不可）')) return;
-  state.scores       = {};
-  state.rankOverrides = {};
-  state.tnScores     = { final: {}, wanpaku: {} };
-  state.matchOrder   = {};
+/* ─── PK ボタンクリックハンドラ ─────────────────────────── */
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.tn-pk-btn');
+  if (!btn) return;
+  const type  = btn.dataset.tntype;
+  const mid   = btn.dataset.tnmid;
+  const pkval = parseInt(btn.dataset.pkval, 10);
+
+  if (!state.tnScores)          state.tnScores = {};
+  if (!state.tnScores[type])    state.tnScores[type] = {};
+  if (!state.tnScores[type][mid]) state.tnScores[type][mid] = {};
+
+  const sc = state.tnScores[type][mid];
+  sc.pk = (sc.pk === pkval) ? undefined : pkval;
+  if (sc.pk === undefined) delete sc.pk;
+
   saveState();
-  renderMatches();
-  renderLeague();
-  renderBracketPane('final',   'pane-final');
-  renderBracketPane('wanpaku', 'pane-wanpaku');
-  /* 現在表示中のタブを再描画 */
-  const activeTab = document.querySelector('.tab-btn.active');
-  if (activeTab) activeTab.click();
-}
+  const paneId = type === 'final' ? 'pane-final' : 'pane-wanpaku';
+  renderBracketPane(type, paneId);
+});
+
 
 /* ═══════════════════════════════════════════════════════════
    ユーティリティ
