@@ -936,29 +936,29 @@ function renderBracket(type) {
     const num = N >> (r + 1);
 
     for (let idx = 0; idx < num; idx++) {
-      const MX  = mcx(r, idx);
-      const MY  = mcy(r);
-      const bx  = MX - BOX_W / 2;
-      const by  = MY - BOX_H / 2;
-      const bot = by + BOX_H;
+      const MX = mcx(r, idx);
+      const MY = mcy(r);
 
+      // ボックスなしなので線はラウンド中心点から直接つなぐ
       const lx = r === 0 ? tcx(idx * 2)     : mcx(r - 1, idx * 2);
       const rx = r === 0 ? tcx(idx * 2 + 1) : mcx(r - 1, idx * 2 + 1);
-      const childTopY = r === 0 ? TEAM_TOP : mcy(r - 1) - BOX_H / 2;
-      const barY = Math.round((bot + childTopY) / 2);
+      const childY = r === 0 ? TEAM_TOP : mcy(r - 1);
+      const barY   = Math.round((MY + childY) / 2);
 
-      svg += `<line x1="${MX}" y1="${bot}" x2="${MX}" y2="${barY}" stroke="#4a5568" stroke-width="1.2"/>`;
+      // 中心から水平バーへの縦線
+      svg += `<line x1="${MX}" y1="${MY}" x2="${MX}" y2="${barY}" stroke="#4a5568" stroke-width="1.2"/>`;
+      // 水平バー
       svg += `<line x1="${lx}" y1="${barY}" x2="${rx}" y2="${barY}" stroke="#4a5568" stroke-width="1.2"/>`;
-      svg += `<line x1="${lx}" y1="${barY}" x2="${lx}" y2="${childTopY}" stroke="#4a5568" stroke-width="1.2"/>`;
-      svg += `<line x1="${rx}" y1="${barY}" x2="${rx}" y2="${childTopY}" stroke="#4a5568" stroke-width="1.2"/>`;
+      // 水平バーから各子へ
+      svg += `<line x1="${lx}" y1="${barY}" x2="${lx}" y2="${childY}" stroke="#4a5568" stroke-width="1.2"/>`;
+      svg += `<line x1="${rx}" y1="${barY}" x2="${rx}" y2="${childY}" stroke="#4a5568" stroke-width="1.2"/>`;
 
+      // 決勝：中心から上へ優勝ライン
       if (r === 3) {
         svg +=
-          `<line x1="${MX}" y1="${by}" x2="${MX}" y2="${PT + 2}" stroke="#b7791f" stroke-width="2"/>` +
+          `<line x1="${MX}" y1="${MY}" x2="${MX}" y2="${PT + 2}" stroke="#b7791f" stroke-width="2"/>` +
           `<text x="${MX}" y="${PT - 4}" text-anchor="middle" font-size="12" font-weight="bold" fill="#b7791f">優勝</text>`;
       }
-
-      // 試合ボックスなし（線のみ表示）
     }
   }
 
