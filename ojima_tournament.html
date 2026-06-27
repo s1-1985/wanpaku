@@ -213,7 +213,6 @@ body {
 .lct-col-hd { background: #edf2f7; padding: 4px 2px; vertical-align: bottom; }
 .lct-col-name {
   writing-mode: vertical-rl;
-  transform: rotate(180deg);
   font-size: 0.82em;
   max-height: 72px;
   overflow: hidden;
@@ -241,6 +240,19 @@ body {
 .lct-sym-win  { color: #276749; font-weight: bold; }
 .lct-sym-loss { color: #c53030; font-weight: bold; }
 .lct-sym-draw { color: #744210; font-weight: bold; }
+.lct-rank-pending { color: #a0aec0; }
+.rank-sel {
+  font-weight: bold; color: #c53030;
+  border: 1px solid #fc8181; border-radius: 3px;
+  font-size: 0.9em; width: 2.8em; padding: 1px;
+  background: #fff5f5; text-align: center;
+}
+
+/* ─── Drag-and-Drop Match List ───────────────────────────── */
+.drag-handle { cursor: grab; color: #a0aec0; padding: 0 6px; user-select: none; font-size: 1.1em; }
+.drag-handle:active { cursor: grabbing; }
+tr.dragging { opacity: 0.4; }
+tr.drag-over td { background: #bee3f8 !important; }
 
 /* ─── Tournament Bracket ────────────────────────────────── */
 .tn-match {
@@ -505,6 +517,7 @@ function loadState() {
     if (saved.scores && typeof saved.scores === 'object') state.scores = saved.scores;
     if (saved.rankOverrides && typeof saved.rankOverrides === 'object') state.rankOverrides = saved.rankOverrides;
     if (saved.tnScores  && typeof saved.tnScores  === 'object') state.tnScores  = saved.tnScores;
+    if (saved.matchOrder && typeof saved.matchOrder === 'object') state.matchOrder = saved.matchOrder;
   } catch (_) { /* localStorage 使用不可の場合は無視 */ }
 }
 
@@ -515,6 +528,7 @@ function saveState() {
       scores:       state.scores,
       rankOverrides: state.rankOverrides,
       tnScores:     state.tnScores,
+      matchOrder:   state.matchOrder,
     }));
   } catch (_) {}
 }
@@ -608,12 +622,21 @@ function renderMatches() {
     }).join('') +
     '</div>';
 
-  /* 選択中コートの試合一覧 */
-  const ms = byCourt[matchCourt];
+  /* 選択中コートの試合一覧（保存順で並べ替え） */
+  let ms = [...byCourt[matchCourt]];
+  const savedOrder = (state.matchOrder || {})[matchCourt];
+  if (savedOrder && savedOrder.length) {
+    ms.sort((a, b) => {
+      const ai = savedOrder.indexOf(a.id);
+      const bi = savedOrder.indexOf(b.id);
+      return (ai < 0 ? 9999 : ai) - (bi < 0 ? 9999 : bi);
+    });
+  }
   const section =
     '<div class="court-sec" id="sec-' + matchCourt + '">' +
     '<div style="overflow-x:auto"><table class="match-table">' +
     '<thead><tr>' +
+    '<th style="width:18px"></th>' +
     '<th>No</th><th>時間</th><th>ブロック</th>' +
     '<th style="text-align:right;padding-right:6px">チーム１</th>' +
     '<th colspan="3">スコア</th>' +
@@ -635,7 +658,8 @@ function matchRowHTML(m, i) {
   const meta = BLOCK_META[m.block];
   const color = BLOCK_COLORS[meta.letter];
 
-  return `<tr class="${done ? 'done' : ''}" id="row-${m.id}">
+  return `<tr class="${done ? 'done' : ''}" id="row-${m.id}" data-mid="${m.id}">
+    <td class="drag-handle" draggable="true" title="ドラッグして並べ替え">⠿</td>
     <td class="col-no">${i + 1}</td>
     <td class="col-time">${m.time}</td>
     <td class="col-blk">
@@ -802,6 +826,31 @@ function computeStandings(blockId) {
   return rows;
 }
 
+function sameStats(a, b) {
+  return a.pts === b.pts && a.gd === b.gd && a.gf === b.gf;
+}
+
+function setTeamRank(blockId, teamId, desiredRank) {
+  const rows = computeStandings(blockId);
+  const tIdx = rows.findIndex(r => r.team.id === teamId);
+  if (tIdx < 0) return;
+  const ref = rows[tIdx];
+
+  let gStart = tIdx, gEnd = tIdx;
+  while (gStart > 0 && sameStats(rows[gStart - 1], ref)) gStart--;
+  while (gEnd < rows.length - 1 && sameStats(rows[gEnd + 1], ref)) gEnd++;
+
+  const order = rows.map(r => r.team.id);
+  order.splice(tIdx, 1);
+  const target = Math.max(gStart, Math.min(gEnd, desiredRank - 1));
+  order.splice(target, 0, teamId);
+
+  if (!state.rankOverrides) state.rankOverrides = {};
+  state.rankOverrides[blockId] = order;
+  saveState();
+  renderLeague();
+}
+
 /* ─── リーグ戦描画 ──────────────────────────────────────── */
 function renderLeague() {
   allMatches = buildMatches(state.teams);
@@ -843,6 +892,7 @@ function renderLeague() {
       const s     = statOf[rowTeam.id];
       const gdStr = s.gd > 0 ? '+' + s.gd : String(s.gd);
       const rkCls = s.rank === 1 ? 'rank-gold' : s.rank === 2 ? 'rank-silver' : s.rank === 3 ? 'rank-bronze' : '';
+      const tied  = s.tiedAbove || s.tiedBelow;
 
       const resultCells = teams.map(colTeam => {
         if (colTeam.id === rowTeam.id) return `<td class="lct-diag"></td>`;
@@ -853,17 +903,37 @@ function renderLeague() {
         return `<td class="lct-result${bg}">${html}</td>`;
       }).join('');
 
+      /* 順位セル：全試合終了後のみ表示 */
+      let rankCell;
+      if (!complete) {
+        rankCell = `<td class="lct-stat lct-rank-pending">－</td>`;
+      } else if (!tied) {
+        rankCell = `<td class="lct-stat lct-rank ${rkCls}">${s.rank}</td>`;
+      } else {
+        /* 同順位：セレクトで手修正可 */
+        let gStart = rows.indexOf(s), gEnd = rows.indexOf(s);
+        while (gStart > 0 && sameStats(rows[gStart - 1], s)) gStart--;
+        while (gEnd < rows.length - 1 && sameStats(rows[gEnd + 1], s)) gEnd++;
+        const opts = [];
+        for (let i = gStart; i <= gEnd; i++) {
+          opts.push(`<option value="${i+1}"${i+1 === s.rank ? ' selected' : ''}>${i+1}</option>`);
+        }
+        rankCell = `<td class="lct-stat">
+          <select class="rank-sel" data-block="${blockId}" data-team="${rowTeam.id}">${opts.join('')}</select>
+        </td>`;
+      }
+
       return `<tr>
         <td class="lct-row-name">${esc(rowTeam.name)}</td>
         ${resultCells}
-        <td class="lct-pts">${s.pts}</td>
-        <td class="lct-stat">${s.w}</td>
-        <td class="lct-stat">${s.l}</td>
-        <td class="lct-stat">${s.d}</td>
-        <td class="lct-stat">${s.gf}</td>
-        <td class="lct-stat">${s.ga}</td>
-        <td class="lct-stat">${gdStr}</td>
-        <td class="lct-stat lct-rank ${rkCls}">${s.rank}</td>
+        <td class="lct-pts">${complete ? s.pts : '－'}</td>
+        <td class="lct-stat">${complete ? s.w : '－'}</td>
+        <td class="lct-stat">${complete ? s.l : '－'}</td>
+        <td class="lct-stat">${complete ? s.d : '－'}</td>
+        <td class="lct-stat">${complete ? s.gf : '－'}</td>
+        <td class="lct-stat">${complete ? s.ga : '－'}</td>
+        <td class="lct-stat">${complete ? gdStr : '－'}</td>
+        ${rankCell}
       </tr>`;
     }).join('');
 
@@ -901,24 +971,93 @@ document.addEventListener('click', e => {
   renderMatches();
 });
 
-/* ─── 順位入替ハンドラ ──────────────────────────────────── */
-document.addEventListener('click', e => {
-  if (!e.target.classList.contains('swap-btn')) return;
-  const blockId = e.target.dataset.block;
-  const idx     = parseInt(e.target.dataset.idx, 10);
+/* ─── 対戦リスト ドラッグ並べ替えハンドラ ────────────── */
+(function() {
+  let dragRow = null, dragOverRow = null;
 
-  const rows = computeStandings(blockId);
-  if (idx < 1) return;
+  function getRow(el) { return el && el.closest('tr[data-mid]'); }
 
-  /* 現在の並びを取得し、タイグループ内で1つ上と入替 */
-  const order = rows.map(r => r.team.id);
-  [order[idx - 1], order[idx]] = [order[idx], order[idx - 1]];
+  function applyDrop() {
+    if (!dragRow || !dragOverRow || dragRow === dragOverRow) return;
+    const src = dragRow.dataset.mid;
+    const tgt = dragOverRow.dataset.mid;
+    const court = matchCourt;
+    const base  = allMatches.filter(m => m.court === court).map(m => m.id);
+    let order = [...((state.matchOrder || {})[court] || base)];
+    const si = order.indexOf(src), ti = order.indexOf(tgt);
+    if (si < 0 || ti < 0) return;
+    order.splice(si, 1);
+    order.splice(ti, 0, src);
+    if (!state.matchOrder) state.matchOrder = {};
+    state.matchOrder[court] = order;
+    saveState();
+    renderMatches();
+  }
 
-  if (!state.rankOverrides) state.rankOverrides = {};
-  state.rankOverrides[blockId] = order;
+  function clearDragState() {
+    if (dragRow) dragRow.classList.remove('dragging');
+    if (dragOverRow) dragOverRow.classList.remove('drag-over');
+    dragRow = null; dragOverRow = null;
+  }
 
-  saveState();
-  renderLeague();
+  /* HTML5 DnD（デスクトップ） */
+  document.addEventListener('dragstart', e => {
+    const row = getRow(e.target);
+    if (!row || !e.target.classList.contains('drag-handle')) return;
+    dragRow = row;
+    row.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  document.addEventListener('dragend', () => clearDragState());
+  document.addEventListener('dragover', e => {
+    const row = getRow(e.target);
+    if (!row || row === dragRow) return;
+    e.preventDefault();
+    if (dragOverRow && dragOverRow !== row) dragOverRow.classList.remove('drag-over');
+    dragOverRow = row;
+    row.classList.add('drag-over');
+  });
+  document.addEventListener('drop', e => {
+    e.preventDefault();
+    applyDrop();
+    clearDragState();
+  });
+
+  /* Pointer events（モバイル） */
+  document.addEventListener('pointerdown', e => {
+    const handle = e.target.closest('.drag-handle');
+    if (!handle) return;
+    dragRow = getRow(handle);
+    if (!dragRow) return;
+    dragRow.classList.add('dragging');
+    dragRow.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('pointermove', e => {
+    if (!dragRow) return;
+    e.preventDefault();
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const row = getRow(el);
+    if (row && row !== dragRow) {
+      if (dragOverRow && dragOverRow !== row) dragOverRow.classList.remove('drag-over');
+      dragOverRow = row;
+      row.classList.add('drag-over');
+    }
+  }, { passive: false });
+  document.addEventListener('pointerup', () => {
+    applyDrop();
+    clearDragState();
+  });
+})();
+
+/* ─── 順位セレクト変更ハンドラ ─────────────────────────── */
+document.addEventListener('change', e => {
+  const sel = e.target.closest('.rank-sel');
+  if (!sel) return;
+  const blockId = sel.dataset.block;
+  const teamId  = sel.dataset.team;
+  const newRank = parseInt(sel.value, 10);
+  setTeamRank(blockId, teamId, newRank);
 });
 
 /* ═══════════════════════════════════════════════════════════
@@ -1039,16 +1178,33 @@ function renderBracket(type) {
   for (let r = 0; r < 4; r++) {
     const num = N >> (r + 1);
     for (let idx = 0; idx < num; idx++) {
-      if (!tnDecided(type, r, idx) || !tnWinner(type, r, idx)) continue;
-      const MX = mcx(r, idx);
-      const MY = mcy(r);
+      if (!tnDecided(type, r, idx)) continue;
+      const sc = tnScore(type, r, idx);
+      if (sc.s1 === sc.s2) continue;   // 引き分けは勝者なし
+
+      const MX     = mcx(r, idx);
+      const MY     = mcy(r);
+      const lx     = r === 0 ? tcx(idx * 2)     : mcx(r - 1, idx * 2);
+      const rx     = r === 0 ? tcx(idx * 2 + 1) : mcx(r - 1, idx * 2 + 1);
+      const childY = r === 0 ? TEAM_TOP : mcy(r - 1);
+      const barY   = Math.round((MY + childY) / 2);
+      const winX   = sc.s1 > sc.s2 ? lx : rx;   // 勝ち側の子x
+
+      const R = '#e53e3e', W = '2.5';
+      // 1. 勝者の子→現バーへの縦線
+      svg += `<line x1="${winX}" y1="${childY}" x2="${winX}" y2="${barY}" stroke="${R}" stroke-width="${W}"/>`;
+      // 2. 現バー上の勝者側横線（子x→試合中心x）
+      svg += `<line x1="${winX}" y1="${barY}" x2="${MX}" y2="${barY}" stroke="${R}" stroke-width="${W}"/>`;
+      // 3. 現バー→試合中心の縦線
+      svg += `<line x1="${MX}" y1="${barY}" x2="${MX}" y2="${MY}" stroke="${R}" stroke-width="${W}"/>`;
+      // 4. 上位ラウンドへの接続（または優勝ラインへ）
       if (r < 3) {
-        const barY = Math.round((MY + mcy(r + 1)) / 2);
-        const pMX  = mcx(r + 1, idx >> 1);
-        svg += `<line x1="${MX}" y1="${MY}" x2="${MX}" y2="${barY}" stroke="#e53e3e" stroke-width="2.5"/>`;
-        svg += `<line x1="${MX}" y1="${barY}" x2="${pMX}" y2="${barY}" stroke="#e53e3e" stroke-width="2.5"/>`;
+        const pBarY = Math.round((MY + mcy(r + 1)) / 2);
+        const pMX   = mcx(r + 1, idx >> 1);
+        svg += `<line x1="${MX}" y1="${MY}" x2="${MX}" y2="${pBarY}" stroke="${R}" stroke-width="${W}"/>`;
+        svg += `<line x1="${MX}" y1="${pBarY}" x2="${pMX}" y2="${pBarY}" stroke="${R}" stroke-width="${W}"/>`;
       } else {
-        svg += `<line x1="${MX}" y1="${MY}" x2="${MX}" y2="${PT + 2}" stroke="#e53e3e" stroke-width="2.5"/>`;
+        svg += `<line x1="${MX}" y1="${MY}" x2="${MX}" y2="${PT + 2}" stroke="${R}" stroke-width="${W}"/>`;
       }
     }
   }
@@ -1197,6 +1353,7 @@ function confirmReset() {
   state.scores       = {};
   state.rankOverrides = {};
   state.tnScores     = { final: {}, wanpaku: {} };
+  state.matchOrder   = {};
   saveState();
   renderMatches();
   renderLeague();
