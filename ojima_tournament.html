@@ -958,10 +958,7 @@ function renderBracket(type) {
           `<text x="${MX}" y="${PT - 4}" text-anchor="middle" font-size="12" font-weight="bold" fill="#b7791f">優勝</text>`;
       }
 
-      // 試合ボックス（スコア入力なし・表示のみ）
-      const dec = tnDecided(type, r, idx);
-      svg += `<rect x="${bx}" y="${by}" width="${BOX_W}" height="${BOX_H}"` +
-        ` fill="${dec ? '#f0fff4' : 'white'}" stroke="${dec ? '#68d391' : '#4a5568'}" stroke-width="1.2"/>`;
+      // 試合ボックスなし（線のみ表示）
     }
   }
 
