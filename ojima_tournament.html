@@ -962,6 +962,24 @@ function renderBracket(type) {
     }
   }
 
+  /* ── 勝者パス：赤い中太線でオーバーレイ ── */
+  for (let r = 0; r < 4; r++) {
+    const num = N >> (r + 1);
+    for (let idx = 0; idx < num; idx++) {
+      if (!tnDecided(type, r, idx) || !tnWinner(type, r, idx)) continue;
+      const MX = mcx(r, idx);
+      const MY = mcy(r);
+      if (r < 3) {
+        const barY = Math.round((MY + mcy(r + 1)) / 2);
+        const pMX  = mcx(r + 1, idx >> 1);
+        svg += `<line x1="${MX}" y1="${MY}" x2="${MX}" y2="${barY}" stroke="#e53e3e" stroke-width="2.5"/>`;
+        svg += `<line x1="${MX}" y1="${barY}" x2="${pMX}" y2="${barY}" stroke="#e53e3e" stroke-width="2.5"/>`;
+      } else {
+        svg += `<line x1="${MX}" y1="${MY}" x2="${MX}" y2="${PT + 2}" stroke="#e53e3e" stroke-width="2.5"/>`;
+      }
+    }
+  }
+
   /* ── チーム枠（最下段・縦書き） ── */
   for (let col = 0; col < N; col++) {
     const x = col * COL_W;
